@@ -1,0 +1,47 @@
+---
+description: 公开 API 与用户体验设计原则
+alwaysApply: true
+---
+
+# API / UX 原则
+
+实现功能前，先定**主路径**和**非目标**，再写代码。
+
+## 主路径（Happy Path）
+
+**调度器**
+```typescript
+const scheduler = new CalendarScheduler({
+  store: createLocalJsonStore({ path: '.cn-calendar-schedule/jobs.json' }),
+  handlers: { daily: (ctx) => {} },
+});
+await scheduler.ready;
+scheduler.solar('0 0 9 * * *', { handlerKey: 'daily' });
+```
+
+**节假日更新**
+```typescript
+await updateData(2027, { force: true, persist: true });
+await loadHolidayOverrides('.cn-calendar-schedule/holiday-overrides.json');
+```
+
+## 非目标
+
+- 运行时 **不要** 写 `src/data/holidays/`（npm 消费者无此路径）
+- bundled JSON 更新走 `pnpm run sync-holiday -- <year>`（维护者 CLI）
+- 不要把 handler 函数序列化进 store；持久化用 `handlerKey` + 内置 registry
+
+## 三种角色
+
+| 角色 | 需求 |
+|------|------|
+| 库使用者 | 构造函数一体化、`await ready`、内置 `handlers` |
+| 单进程服务 | override 文件 + reconcile |
+| 维护者 | `sync-holiday` 更新 bundled JSON |
+
+## 变更检查清单
+
+- [ ] README 快速开始示例可复制且与 API 一致
+- [ ] 公开 API 变更同步 `src/index.ts` 导出与类型
+- [ ] async API 变更检查所有调用方
+- [ ] 新增能力有测试；不添加 trivial 测试

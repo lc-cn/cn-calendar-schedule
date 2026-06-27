@@ -1,0 +1,36 @@
+---
+description: 测试与文档同步要求
+globs: tests/**,README.md,package.json
+alwaysApply: false
+---
+
+# 测试与文档
+
+## 命令
+
+```bash
+pnpm test              # vitest run（180 tests）
+pnpm run test:coverage # 覆盖率（阈值：lines/functions/statements 90%，branches 88%）
+pnpm run build         # tsup → ESM/CJS/UMD + .d.ts
+pnpm exec tsc --noEmit # 类型检查
+```
+
+## 测试
+
+- 集成测试用 `vi.useFakeTimers()` + `Asia/Shanghai`
+- 持久化测试用 `tests/.tmp/` 隔离目录， `afterEach` 清理
+- mock `fetch` 测 holiday-fetcher，勿依赖网络
+- 持久化场景：`await scheduler.ready` 后再断言
+
+## README
+
+功能/API 变更**必须**同步 README：
+
+- 快速开始、持久化、`updateData` 主路径
+- 公开 API 表、类型列表
+- 定位 tagline 与 `package.json` description/keywords 一致
+
+## Git
+
+- 仅用户明确要求时 commit
+- 不提交 `.env`、密钥、`tests/.tmp/` 产物

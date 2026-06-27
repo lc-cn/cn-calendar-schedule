@@ -1,0 +1,37 @@
+---
+description: 节假日数据格式与更新边界
+globs: src/data/**,src/update-data.ts,scripts/**,tests/holiday*.test.ts
+alwaysApply: false
+---
+
+# 节假日数据
+
+## JSON 格式（按年）
+
+```json
+{
+  "holidayRanges": [{ "start": "2025-01-01", "end": "2025-01-01", "festival": "元旦" }],
+  "workdays": ["2025-01-26"]
+}
+```
+
+- `holidayRanges`：法定假日连休区间（含首尾）
+- `workdays`：国务院补班日
+
+## 数据来源
+
+- **Bundled**：`src/data/holidays/2019–2026.json`（编译进 dist）
+- **运行时 override**：`.cn-calendar-schedule/holiday-overrides.json`（`updateData` + `persist`）
+- **拉取**：`holiday-cn`（溯源 gov.cn）→ `fetchHolidayYearData` → `convertHolidayCnToYearData`
+
+## 更新 API
+
+| 场景 | 用法 |
+|------|------|
+| 自动拉取 + 覆盖内存 + 持久化 | `await updateData(year, { force: true, persist: true })` |
+| 手动传入 | `await updateData(year, { holidayRanges, workdays })` |
+| 维护 bundled | `pnpm run sync-holiday -- 2027` |
+
+`updateData` 触发 `onHolidayDataUpdate` → scheduler 重算 `nextRunAt`。
+
+国庆+中秋合并名统一为 `'国庆节'`（见 `normalizeOfficialFestivalName`）。

@@ -1,0 +1,28 @@
+---
+description: TypeScript 实现约定
+globs: src/**/*.ts
+alwaysApply: false
+---
+
+# TypeScript 约定
+
+- **Strict mode**；ESM（import 带 `.js` 后缀）
+- **最小 diff**：只改任务相关代码，不顺手重构
+- **匹配现有风格**：命名、扁平 `ResolvedJob` 分支、resolver 纯函数
+- **Comments**：仅解释非 obvious 的业务/算法细节
+
+## 类型
+
+- 公开类型放 `src/types.ts` 或对应模块并经由 `src/index.ts` 导出
+- `ResolvedJob` 用 discriminated union（`kind` 字段），勿嵌套 trigger
+- `JobRegisterArg` = inline `JobHandler` | `RegisterJobOptions`
+
+## 依赖
+
+- 不加 runtime dependency；新算法自研或内置数据
+- 动态 `import('node:fs/promises')` 仅用于可选 I/O（persist、load overrides）
+
+## 错误
+
+- 用户输入错误抛 `InvalidScheduleError`
+- 持久化失败在 shutdown 场景 best-effort，不 throw

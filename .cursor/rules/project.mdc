@@ -1,0 +1,35 @@
+---
+description: cn-calendar-schedule 项目定位与架构约束
+alwaysApply: true
+---
+
+# 项目定位
+
+**中国日历语义调度器** — 在国历、农历、法定假日、休息日、工作日上定任务，不是通用 cron 的副产物。
+
+- **零 runtime 依赖**（`peerDependencies` 仅预留分布式扩展）
+- **五种 ScheduleKind**：`solar` | `lunar` | `holiday` | `freeDay` | `workday`
+- **默认时区**：`Asia/Shanghai`
+- **npm 发布物**：仅 `dist/`（bundled 节假日 JSON 编译进产物）
+
+## 分层
+
+```
+CalendarScheduler          ← 公开入口：注册任务、TimerWheel、持久化、handlers
+resolve-job.ts / dispatch  ← ResolvedJob 构建与 getNextRun 分发
+resolvers/*                ← 各 kind 的 next-run 算法
+parsers/cron.ts            ← 6 段 cron（秒 分 时 日 月 周）
+data/holiday-registry.ts   ← 可变节假日 registry + updateData
+data/lunar-table.ts        ← 1900–2100 农历年表
+store/*                    ← JobStore 抽象 + LocalJsonJobStore
+```
+
+## 语义边界（勿混淆）
+
+| kind | 含义 |
+|------|------|
+| `holiday` | 仅国务院法定假日（可过滤 festival） |
+| `freeDay` | 休息日 = 法定假日 + 正常周末，不含补班 |
+| `workday` | 工作日 = 非 freeDay（含补班） |
+
+`FestivalName` 使用中文：`'元旦'|'春节'|…|'国庆节'`。

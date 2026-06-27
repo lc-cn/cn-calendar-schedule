@@ -1,0 +1,81 @@
+{
+  "name": "cn-calendar-schedule",
+  "version": "0.1.0",
+  "description": "Chinese calendar semantic scheduler — zero-deps solar, lunar, statutory holidays, rest days & makeup workdays",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "unpkg": "./dist/index.umd.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs",
+      "default": "./dist/index.mjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:watch": "vitest",
+    "sync-holiday": "pnpm run build && node scripts/sync-holiday.mjs",
+    "sync-holidays": "pnpm run build && node scripts/sync-holidays-auto.mjs",
+    "generate-holiday-registry": "node scripts/generate-holiday-registry.mjs",
+    "prepublishOnly": "pnpm run build && pnpm run test:coverage"
+  },
+  "keywords": [
+    "cron",
+    "scheduler",
+    "node",
+    "chinese-calendar",
+    "lunar",
+    "solar",
+    "holiday",
+    "china-holiday",
+    "workday",
+    "rest-day",
+    "makeup-workday"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/liuchunlang/cn-calendar-schedule.git"
+  },
+  "bugs": {
+    "url": "https://github.com/liuchunlang/cn-calendar-schedule/issues"
+  },
+  "homepage": "https://github.com/liuchunlang/cn-calendar-schedule#readme",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "packageManager": "pnpm@11.8.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "peerDependencies": {
+    "bullmq": ">=5",
+    "ioredis": ">=5"
+  },
+  "peerDependenciesMeta": {
+    "bullmq": {
+      "optional": true
+    },
+    "ioredis": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.2",
+    "@vitest/coverage-v8": "^4.1.9",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.9"
+  }
+}
