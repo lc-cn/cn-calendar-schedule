@@ -84,13 +84,13 @@ const scheduler = new CalendarScheduler({
 });
 await scheduler.ready;  // 有 store 时异步恢复已持久化任务
 
-scheduler.registerHandler('daily', handler);  // 或 scheduler.handlers.register
-scheduler.solar('0 0 9 * * *', { handlerKey: 'daily', id: '...' });
-scheduler.solar('0 0 9 * * *', { handlerKey: 'daily', handler, id: '...' }); // 自动 register
+scheduler.registerHandler('daily', handler);
+scheduler.solar('0 0 9 * * *', handler, 'daily', { id: '...' });
+// key 默认 handler.name；匿名函数需显式传 key
 ```
 
-- inline handler → 内存任务（ephemeral），不写入 store
-- `handlerKey` → 持久化任务配置；handler 从内置 registry 查找
+- inline handler 且无 key → 内存任务（ephemeral）
+- 有 key（显式或 `handler.name`）→ 自动 register 到 handlers；配置 store 时持久化任务
 - `reconcile` 循环（默认 1s）处理 store 中 overdue 任务
 - `CalendarScheduler.create()` = `new` + `await ready`
 

@@ -1,4 +1,4 @@
-import type { JobHandler, JobInfo, RegisterJobOptions, ResolvedJob } from './types.js';
+import type { JobHandler, JobInfo, ResolvedJob } from './types.js';
 
 let nextJobId = 1;
 
@@ -26,8 +26,10 @@ export function toJobInfo(job: InternalJob, cancel: () => void): JobInfo {
   };
 }
 
-export function isRegisterJobOptions(value: JobHandler | RegisterJobOptions): value is RegisterJobOptions {
-  return typeof value === 'object' && value !== null && 'handlerKey' in value;
+/** 解析 handler 注册 key；默认取 `handler.name`，匿名函数需显式传入 key */
+export function resolveHandlerKey(handler: JobHandler, key?: string): string | undefined {
+  const resolved = key ?? handler.name;
+  return resolved || undefined;
 }
 
 export class JobHeap {

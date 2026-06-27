@@ -101,18 +101,19 @@ function dateKeyToUtc(
   dateKey: string,
   hour: number,
   minute: number,
+  second: number,
   timezone: string,
 ): Date {
   const { year, month, day } = parseDateKey(dateKey);
-  return zonedTimeToUtc(year, month, day, hour, minute, 0, timezone);
+  return zonedTimeToUtc(year, month, day, hour, minute, second, timezone);
 }
 
 export function getHolidayNextRun(from: Date, job: ResolvedHolidayJob): Date | null {
-  const { hour, minute } = parseTimeString(job.time);
+  const { hour, minute, second } = parseTimeString(job.time);
   const candidates = collectHolidayTriggerDates(job.festivals, job.everyDayOfHoliday);
 
   for (const dateKey of candidates) {
-    const runAt = dateKeyToUtc(dateKey, hour, minute, job.timezone);
+    const runAt = dateKeyToUtc(dateKey, hour, minute, second, job.timezone);
     if (runAt > from) {
       return runAt;
     }
@@ -121,9 +122,9 @@ export function getHolidayNextRun(from: Date, job: ResolvedHolidayJob): Date | n
 }
 
 export function isHolidayDue(at: Date, job: ResolvedHolidayJob): boolean {
-  const { hour, minute } = parseTimeString(job.time);
+  const { hour, minute, second } = parseTimeString(job.time);
   const parts = getDatePartsInTimezone(at, job.timezone);
-  if (parts.hour !== hour || parts.minute !== minute) {
+  if (parts.hour !== hour || parts.minute !== minute || parts.second !== second) {
     return false;
   }
   const key = formatDateKey(at, job.timezone);

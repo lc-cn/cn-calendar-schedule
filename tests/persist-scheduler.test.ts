@@ -23,7 +23,7 @@ describe('persist scheduler', () => {
   afterEach(async () => {
     vi.useRealTimers();
     if (tempDir) {
-      await rm(tempDir, { recursive: true, force: true });
+      await rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
     }
   });
 
@@ -43,11 +43,11 @@ describe('persist scheduler', () => {
     return { scheduler, handler, store };
   }
 
-  it('persists handlerKey jobs and restores after restart', async () => {
+  it('persists keyed jobs and restores after restart', async () => {
     vi.setSystemTime(new Date('2025-06-27T08:59:00+08:00'));
 
     const { scheduler, handler } = await setup();
-    scheduler.solar('0 0 9 * * *', { handlerKey: 'daily', id: 'job-persist-1' });
+    scheduler.solar('0 0 9 * * *', handler, 'daily', { id: 'job-persist-1' });
 
     await vi.waitFor(async () => {
       const raw = await readFile(jobsPath, 'utf8');
@@ -74,7 +74,7 @@ describe('persist scheduler', () => {
     scheduler2.stop();
   });
 
-  it('inline handler jobs are not persisted', async () => {
+  it('anonymous handler jobs are not persisted', async () => {
     vi.setSystemTime(new Date('2025-06-27T08:59:00+08:00'));
     const { scheduler } = await setup();
     scheduler.solar('0 0 9 * * *', vi.fn());
@@ -85,7 +85,7 @@ describe('persist scheduler', () => {
     scheduler.stop();
   });
 
-  it('auto-registers handler when handlerKey and handler are passed together', async () => {
+  it('registers handler when key is provided', async () => {
     vi.setSystemTime(new Date('2025-06-27T08:59:00+08:00'));
 
     const handler = vi.fn();
@@ -95,11 +95,7 @@ describe('persist scheduler', () => {
     });
     await scheduler.ready;
 
-    scheduler.solar('0 0 9 * * *', {
-      handlerKey: 'daily',
-      handler,
-      id: 'job-auto-reg',
-    });
+    scheduler.solar('0 0 9 * * *', handler, 'daily', { id: 'job-auto-reg' });
 
     await vi.advanceTimersByTimeAsync(60_000);
     await Promise.resolve();
@@ -110,13 +106,13 @@ describe('persist scheduler', () => {
     scheduler.stop();
   });
 
-  it('registerHandler adds to built-in registry', async () => {
+  it('registerHandler works with keyed schedule calls', async () => {
     vi.setSystemTime(new Date('2025-06-27T08:59:00+08:00'));
 
     const handler = vi.fn();
     const scheduler = new CalendarScheduler({ timezone: 'Asia/Shanghai' });
     scheduler.registerHandler('daily', handler);
-    scheduler.solar('0 0 9 * * *', { handlerKey: 'daily' });
+    scheduler.solar('0 0 9 * * *', handler, 'daily');
 
     await vi.advanceTimersByTimeAsync(60_000);
     await Promise.resolve();

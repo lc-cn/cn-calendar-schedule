@@ -15,7 +15,7 @@ alwaysApply: false
 
 - 公开类型放 `src/types.ts` 或对应模块并经由 `src/index.ts` 导出
 - `ResolvedJob` 用 discriminated union（`kind` 字段），勿嵌套 trigger
-- `JobRegisterArg` = inline `JobHandler` | `RegisterJobOptions`
+- schedule 方法统一 `(cron|input, handler, key?, extras?)`；key 默认 `handler.name`
 
 ## 依赖
 

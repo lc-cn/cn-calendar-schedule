@@ -3,7 +3,7 @@ import { onHolidayDataUpdate } from './data/holiday-registry.js';
 import { getNextRun } from './dispatch.js';
 import {
   createJobId,
-  isRegisterJobOptions,
+  resolveHandlerKey,
   toJobInfo,
   type InternalJob,
 } from './job.js';
@@ -26,7 +26,7 @@ import type {
   HolidayInput,
   JobHandler,
   JobInfo,
-  JobRegisterArg,
+  JobRegisterExtras,
   ResolvedJob,
   SchedulerOptions,
   TimeInput,
@@ -120,24 +120,60 @@ export class CalendarScheduler {
     }
   }
 
-  solar(cron: string, arg: JobRegisterArg): JobInfo {
-    return this.register(resolveSolarJob(cron, this.timezone), arg);
+  solar(cron: string, handler: JobHandler, key?: string, extras?: JobRegisterExtras): JobInfo {
+    return this.register(resolveSolarJob(cron, this.timezone), handler, key, extras);
   }
 
-  lunar(cron: string, arg: JobRegisterArg): JobInfo {
-    return this.register(resolveLunarJob(cron, this.timezone), arg);
+  lunar(cron: string, handler: JobHandler, key?: string, extras?: JobRegisterExtras): JobInfo {
+    return this.register(resolveLunarJob(cron, this.timezone), handler, key, extras);
   }
 
-  holiday(input: HolidayInput, arg: JobRegisterArg): JobInfo {
-    return this.register(resolveHolidayJob(input, this.timezone), arg);
+  holiday(time: string, handler: JobHandler, key?: string, extras?: JobRegisterExtras): JobInfo;
+  holiday(input: HolidayInput, handler: JobHandler, key?: string, extras?: JobRegisterExtras): JobInfo;
+  holiday(
+    input: string | HolidayInput,
+    handler: JobHandler,
+    key?: string,
+    extras?: JobRegisterExtras,
+  ): JobInfo {
+    return this.register(
+      resolveHolidayJob(typeof input === 'string' ? { time: input } : input, this.timezone),
+      handler,
+      key,
+      extras,
+    );
   }
 
-  freeDay(time: TimeInput, arg: JobRegisterArg): JobInfo {
-    return this.register(resolveFreeDayJob(time, this.timezone), arg);
+  freeDay(time: string, handler: JobHandler, key?: string, extras?: JobRegisterExtras): JobInfo;
+  freeDay(time: TimeInput, handler: JobHandler, key?: string, extras?: JobRegisterExtras): JobInfo;
+  freeDay(
+    time: string | TimeInput,
+    handler: JobHandler,
+    key?: string,
+    extras?: JobRegisterExtras,
+  ): JobInfo {
+    return this.register(
+      resolveFreeDayJob(typeof time === 'string' ? { time } : time, this.timezone),
+      handler,
+      key,
+      extras,
+    );
   }
 
-  workday(time: TimeInput, arg: JobRegisterArg): JobInfo {
-    return this.register(resolveWorkdayJob(time, this.timezone), arg);
+  workday(time: string, handler: JobHandler, key?: string, extras?: JobRegisterExtras): JobInfo;
+  workday(time: TimeInput, handler: JobHandler, key?: string, extras?: JobRegisterExtras): JobInfo;
+  workday(
+    time: string | TimeInput,
+    handler: JobHandler,
+    key?: string,
+    extras?: JobRegisterExtras,
+  ): JobInfo {
+    return this.register(
+      resolveWorkdayJob(typeof time === 'string' ? { time } : time, this.timezone),
+      handler,
+      key,
+      extras,
+    );
   }
 
   cancel(id: string): boolean {
@@ -170,28 +206,32 @@ export class CalendarScheduler {
     this.jobs.clear();
   }
 
-  private register(resolved: ResolvedJob, arg: JobRegisterArg): JobInfo {
+  private register(
+    resolved: ResolvedJob,
+    handler: JobHandler,
+    key?: string,
+    extras?: JobRegisterExtras,
+  ): JobInfo {
     if (!this.running) {
       throw new Error('Scheduler has been stopped');
     }
 
-    const options = isRegisterJobOptions(arg) ? arg : undefined;
-    const handler = options ? undefined : (arg as JobHandler);
+    const handlerKey = resolveHandlerKey(handler, key);
 
-    if (options?.handlerKey && options.handler) {
-      this.handlers.register(options.handlerKey, options.handler);
+    if (handlerKey) {
+      this.handlers.register(handlerKey, handler);
     }
 
-    const id = options?.id ?? createJobId();
+    const id = extras?.id ?? createJobId();
     const nextRunAt = getNextRun(resolved, new Date());
-    const ephemeral = !this.store || !options?.handlerKey;
+    const ephemeral = !this.store || !handlerKey;
 
     const job: InternalJob = {
       id,
       resolved,
-      handler,
-      handlerKey: options?.handlerKey,
-      payload: options?.payload,
+      handler: handlerKey ? undefined : handler,
+      handlerKey,
+      payload: extras?.payload,
       nextRunAt,
       cancelled: false,
       ephemeral,
@@ -200,7 +240,7 @@ export class CalendarScheduler {
     this.jobs.set(id, job);
     this.timer.add(job);
 
-    if (this.store && options?.handlerKey) {
+    if (this.store && handlerKey) {
       void this.persistJob(job);
     }
 

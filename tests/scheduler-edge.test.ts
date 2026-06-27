@@ -31,7 +31,7 @@ describe('CalendarScheduler edge cases', () => {
       storePath: join(tempDir, 'jobs.json'),
       handlers: { daily: handler },
     });
-    scheduler.solar('0 0 9 * * *', { handlerKey: 'daily' });
+    scheduler.solar('0 0 9 * * *', handler, 'daily');
     scheduler.stop();
   });
 
@@ -40,15 +40,23 @@ describe('CalendarScheduler edge cases', () => {
     tempDir = join(TEST_TMP_ROOT, `missing-handler-${Date.now()}`);
     await mkdir(tempDir, { recursive: true });
 
+    const store = createLocalJsonStore({ path: join(tempDir, 'jobs.json') });
+    await store.upsert({
+      id: 'orphan',
+      handlerKey: 'missing',
+      resolved: { kind: 'solar', cron: '0 0 9 * * *', timezone: 'Asia/Shanghai' },
+      nextRunAt: '2025-06-27T01:00:00.000Z',
+      cancelled: false,
+      updatedAt: new Date().toISOString(),
+    });
+
     const errors: Error[] = [];
     const scheduler = new CalendarScheduler({
       timezone: 'Asia/Shanghai',
-      store: createLocalJsonStore({ path: join(tempDir, 'jobs.json') }),
+      store,
       onError: (err) => errors.push(err),
     });
     await scheduler.ready;
-
-    scheduler.solar('0 0 9 * * *', { handlerKey: 'missing', id: 'orphan' });
     await vi.advanceTimersByTimeAsync(60_000);
     await Promise.resolve();
 
@@ -79,8 +87,7 @@ describe('CalendarScheduler edge cases', () => {
     vi.setSystemTime(new Date('2025-06-27T08:59:00+08:00'));
     const handler = vi.fn();
     const scheduler = new CalendarScheduler({ timezone: 'Asia/Shanghai' });
-    scheduler.registerHandler('with-payload', handler);
-    scheduler.solar('0 0 9 * * *', { handlerKey: 'with-payload', payload: { n: 1 } });
+    scheduler.solar('0 0 9 * * *', handler, 'with-payload', { payload: { n: 1 } });
 
     await vi.advanceTimersByTimeAsync(60_000);
     await Promise.resolve();
@@ -101,14 +108,14 @@ describe('CalendarScheduler edge cases', () => {
     await mkdir(tempDir, { recursive: true });
     const jobsPath = join(tempDir, 'jobs.json');
 
+    const handler = vi.fn();
     const scheduler = new CalendarScheduler({
       timezone: 'Asia/Shanghai',
       store: createLocalJsonStore({ path: jobsPath }),
-      handlers: { daily: vi.fn() },
     });
     await scheduler.ready;
 
-    const job = scheduler.solar('0 0 9 * * *', { handlerKey: 'daily', id: 'to-cancel' });
+    const job = scheduler.solar('0 0 9 * * *', handler, 'daily', { id: 'to-cancel' });
     await vi.waitFor(async () => {
       expect(await readFile(jobsPath, 'utf8')).toContain('to-cancel');
     });
@@ -220,17 +227,14 @@ describe('CalendarScheduler edge cases', () => {
       workdays: [],
     });
 
+    const handler = vi.fn();
     const scheduler = new CalendarScheduler({
       timezone: 'Asia/Shanghai',
       store: createLocalJsonStore({ path: jobsPath }),
-      handlers: { h: vi.fn() },
     });
     await scheduler.ready;
 
-    scheduler.holiday(
-      { time: '09:00', festivals: ['元旦'] },
-      { handlerKey: 'h', id: 'vanish-job' },
-    );
+    scheduler.holiday({ time: '09:00', festivals: ['元旦'] }, handler, 'h', { id: 'vanish-job' });
     await vi.waitFor(async () => {
       expect(await readFile(jobsPath, 'utf8')).toContain('vanish-job');
     });

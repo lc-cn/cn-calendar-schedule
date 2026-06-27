@@ -12,7 +12,7 @@ const MS_PER_DAY = 86_400_000;
 const MAX_SCAN_DAYS = 400;
 
 export function getWorkdayNextRun(from: Date, job: ResolvedWorkdayJob): Date | null {
-  const { hour, minute } = parseTimeString(job.time);
+  const { hour, minute, second } = parseTimeString(job.time);
   let cursor = from;
 
   for (let day = 0; day < MAX_SCAN_DAYS; day++) {
@@ -23,7 +23,7 @@ export function getWorkdayNextRun(from: Date, job: ResolvedWorkdayJob): Date | n
       parts.day,
       hour,
       minute,
-      0,
+      second,
       job.timezone,
     );
 
@@ -37,7 +37,12 @@ export function getWorkdayNextRun(from: Date, job: ResolvedWorkdayJob): Date | n
 }
 
 export function isWorkdayDue(at: Date, job: ResolvedWorkdayJob): boolean {
-  const { hour, minute } = parseTimeString(job.time);
+  const { hour, minute, second } = parseTimeString(job.time);
   const parts = getDatePartsInTimezone(at, job.timezone);
-  return parts.hour === hour && parts.minute === minute && isWorkday(at, job.timezone);
+  return (
+    parts.hour === hour &&
+    parts.minute === minute &&
+    parts.second === second &&
+    isWorkday(at, job.timezone)
+  );
 }

@@ -15,6 +15,12 @@ describe('WorkdayResolver', () => {
     expect(isJobDue(job, at('2024-09-23T09:00:00+08:00'))).toBe(true);
   });
 
+  it('supports HH:mm:ss time', () => {
+    const job = resolveWorkdayJob({ time: '09:00:30' }, TZ);
+    expect(isJobDue(job, at('2024-09-23T09:00:30+08:00'))).toBe(true);
+    expect(isJobDue(job, at('2024-09-23T09:00:00+08:00'))).toBe(false);
+  });
+
   it('triggers on makeup workday Sunday', () => {
     const job = resolveWorkdayJob({ time: '09:00' }, TZ);
     expect(isJobDue(job, at('2024-09-29T09:00:00+08:00'))).toBe(true);

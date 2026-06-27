@@ -17,7 +17,7 @@ export function isFreeDay(date: Date, timezone = 'Asia/Shanghai'): boolean {
 }
 
 export function getFreeDayNextRun(from: Date, job: ResolvedFreeDayJob): Date | null {
-  const { hour, minute } = parseTimeString(job.time);
+  const { hour, minute, second } = parseTimeString(job.time);
   let cursor = from;
 
   for (let day = 0; day < MAX_SCAN_DAYS; day++) {
@@ -28,7 +28,7 @@ export function getFreeDayNextRun(from: Date, job: ResolvedFreeDayJob): Date | n
       parts.day,
       hour,
       minute,
-      0,
+      second,
       job.timezone,
     );
 
@@ -42,9 +42,9 @@ export function getFreeDayNextRun(from: Date, job: ResolvedFreeDayJob): Date | n
 }
 
 export function isFreeDayDue(at: Date, job: ResolvedFreeDayJob): boolean {
-  const { hour, minute } = parseTimeString(job.time);
+  const { hour, minute, second } = parseTimeString(job.time);
   const parts = getDatePartsInTimezone(at, job.timezone);
-  if (parts.hour !== hour || parts.minute !== minute) {
+  if (parts.hour !== hour || parts.minute !== minute || parts.second !== second) {
     return false;
   }
   return isFreeDay(at, job.timezone);

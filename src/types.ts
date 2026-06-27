@@ -45,15 +45,11 @@ export interface SchedulerOptions {
   reconcileIntervalMs?: number;
 }
 
-export interface RegisterJobOptions {
-  handlerKey: string;
-  /** 传入时自动注册到内置 handlers，并持久化（需配置 store） */
-  handler?: JobHandler;
+/** 可选任务元数据（第 4 参数） */
+export interface JobRegisterExtras {
   id?: string;
   payload?: unknown;
 }
-
-export type JobRegisterArg = JobHandler | RegisterJobOptions;
 
 export interface TimeInput {
   time: string;

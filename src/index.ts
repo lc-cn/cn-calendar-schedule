@@ -38,8 +38,7 @@ export type {
   JobInfo,
   FestivalFilter,
   FestivalName,
-  RegisterJobOptions,
-  JobRegisterArg,
+  JobRegisterExtras,
 } from './types.js';
 export type { StoredJob, JobStore, LocalJsonStoreOptions } from './store/types.js';
 export type { HolidayRange, HolidayYearData, UpdateDataOptions, HolidayCnDay, HolidayCnYear } from './update-data.js';

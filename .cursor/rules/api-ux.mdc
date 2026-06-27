@@ -16,7 +16,10 @@ const scheduler = new CalendarScheduler({
   handlers: { daily: (ctx) => {} },
 });
 await scheduler.ready;
-scheduler.solar('0 0 9 * * *', { handlerKey: 'daily' });
+function daily(ctx: { solarText: string }) {
+  console.log(ctx.solarText);
+}
+scheduler.solar('0 0 9 * * *', daily); // key = 'daily'
 ```
 
 **节假日更新**
@@ -29,7 +32,7 @@ await loadHolidayOverrides('.cn-calendar-schedule/holiday-overrides.json');
 
 - 运行时 **不要** 写 `src/data/holidays/`（npm 消费者无此路径）
 - bundled JSON 更新走 `pnpm run sync-holiday -- <year>`（维护者 CLI）
-- 不要把 handler 函数序列化进 store；持久化用 `handlerKey` + 内置 registry
+- 不要把 handler 函数序列化进 store；持久化用 key（默认 `handler.name`）+ 内置 registry
 
 ## 三种角色
 
