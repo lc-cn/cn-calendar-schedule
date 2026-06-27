@@ -1,6 +1,6 @@
 {
   "name": "cn-calendar-schedule",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "description": "Chinese calendar semantic scheduler — zero-deps solar, lunar, statutory holidays, rest days & makeup workdays",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -45,15 +45,16 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/liuchunlang/cn-calendar-schedule.git"
+    "url": "git+https://github.com/lc-cn/cn-calendar-schedule.git"
   },
   "bugs": {
-    "url": "https://github.com/liuchunlang/cn-calendar-schedule/issues"
+    "url": "https://github.com/lc-cn/cn-calendar-schedule/issues"
   },
-  "homepage": "https://github.com/liuchunlang/cn-calendar-schedule#readme",
+  "homepage": "https://github.com/lc-cn/cn-calendar-schedule#readme",
   "publishConfig": {
     "access": "public",
-    "provenance": true
+    "provenance": true,
+    "registry": "https://registry.npmjs.org/"
   },
   "packageManager": "pnpm@11.8.0",
   "engines": {
