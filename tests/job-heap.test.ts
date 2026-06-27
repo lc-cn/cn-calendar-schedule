@@ -58,6 +58,24 @@ describe('JobHeap', () => {
     expect(heap.peek()?.id).toBe('b');
   });
 
+  it('orders null nextRunAt after dated jobs in heap compare', () => {
+    const heap = new JobHeap();
+    heap.push(job('dated', new Date('2025-06-27T09:00:00+08:00')));
+    heap.push(job('null', null));
+    expect(heap.pop()?.id).toBe('dated');
+    expect(heap.pop()?.id).toBe('null');
+  });
+
+  it('bubbleDown prefers left child when it is smaller than right', () => {
+    const heap = new JobHeap();
+    heap.push(job('root', new Date('2025-06-27T09:00:00+08:00')));
+    heap.push(job('left', new Date('2025-06-27T10:00:00+08:00')));
+    heap.push(job('right', new Date('2025-06-27T11:00:00+08:00')));
+
+    heap.remove('root');
+    expect(heap.peek()?.id).toBe('left');
+  });
+
   it('bubbleDown uses right child when it is smaller', () => {
     const heap = new JobHeap();
     heap.push(job('root', new Date('2025-06-27T09:00:00+08:00')));

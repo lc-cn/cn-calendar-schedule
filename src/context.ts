@@ -7,6 +7,7 @@ export function buildJobContext(
   kind: ScheduleKind,
   scheduledAt: Date,
   timezone: string,
+  scatter?: { scatterIndex: number; scatterCount: number },
 ): JobContext {
   return {
     jobId,
@@ -15,5 +16,7 @@ export function buildJobContext(
     solarText: formatSolarText(scheduledAt, timezone),
     lunarText: formatLunarText(scheduledAt, timezone),
     festival: getFestivalForDate(scheduledAt, timezone),
+    scatterIndex: scatter?.scatterIndex,
+    scatterCount: scatter?.scatterCount,
   };
 }

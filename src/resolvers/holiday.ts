@@ -7,12 +7,8 @@ import {
   iterateYears,
 } from '../data/holiday-registry.js';
 import { matchesFestivalFilter, normalizeFestivalKey } from '../utils/festival-map.js';
-import {
-  formatDateKey,
-  getDatePartsInTimezone,
-  parseTimeString,
-  zonedTimeToUtc,
-} from '../utils/timezone.js';
+import { formatDateKey, getDatePartsInTimezone } from '../utils/timezone.js';
+import { getCalendarCronNextRun, isCalendarCronDue } from './calendar-cron.js';
 
 export type ResolvedHolidayJob = Extract<ResolvedJob, { kind: 'holiday' }>;
 
@@ -24,11 +20,6 @@ export {
   getMaxHolidayYear,
   onHolidayDataUpdate,
 } from '../data/holiday-registry.js';
-
-function parseDateKey(key: string): { year: number; month: number; day: number } {
-  const [y, m, d] = key.split('-').map((v) => parseInt(v, 10));
-  return { year: y, month: m, day: d };
-}
 
 function isDateInRange(key: string, start: string, end: string): boolean {
   return key >= start && key <= end;
@@ -97,37 +88,35 @@ function collectHolidayTriggerDates(
   return [...dates].sort();
 }
 
-function dateKeyToUtc(
-  dateKey: string,
-  hour: number,
-  minute: number,
-  second: number,
+export function isHolidayCalendarDay(
+  date: Date,
+  festivals: FestivalFilter,
+  everyDayOfHoliday: boolean,
   timezone: string,
-): Date {
-  const { year, month, day } = parseDateKey(dateKey);
-  return zonedTimeToUtc(year, month, day, hour, minute, second, timezone);
+): boolean {
+  const key = formatDateKey(date, timezone);
+  const candidateSet = new Set(collectHolidayTriggerDates(festivals, everyDayOfHoliday));
+  return candidateSet.has(key);
+}
+
+function isHolidayTriggerDay(
+  at: Date,
+  job: ResolvedHolidayJob,
+  candidateSet: Set<string>,
+): boolean {
+  return candidateSet.has(formatDateKey(at, job.timezone));
 }
 
 export function getHolidayNextRun(from: Date, job: ResolvedHolidayJob): Date | null {
-  const { hour, minute, second } = parseTimeString(job.time);
-  const candidates = collectHolidayTriggerDates(job.festivals, job.everyDayOfHoliday);
-
-  for (const dateKey of candidates) {
-    const runAt = dateKeyToUtc(dateKey, hour, minute, second, job.timezone);
-    if (runAt > from) {
-      return runAt;
-    }
-  }
-  return null;
+  const candidateSet = new Set(collectHolidayTriggerDates(job.festivals, job.everyDayOfHoliday));
+  return getCalendarCronNextRun(from, job.cron, job.timezone, (date) =>
+    isHolidayTriggerDay(date, job, candidateSet),
+  );
 }
 
 export function isHolidayDue(at: Date, job: ResolvedHolidayJob): boolean {
-  const { hour, minute, second } = parseTimeString(job.time);
-  const parts = getDatePartsInTimezone(at, job.timezone);
-  if (parts.hour !== hour || parts.minute !== minute || parts.second !== second) {
-    return false;
-  }
-  const key = formatDateKey(at, job.timezone);
-  const candidates = collectHolidayTriggerDates(job.festivals, job.everyDayOfHoliday);
-  return candidates.includes(key);
+  const candidateSet = new Set(collectHolidayTriggerDates(job.festivals, job.everyDayOfHoliday));
+  return isCalendarCronDue(at, job.cron, job.timezone, (date) =>
+    isHolidayTriggerDay(date, job, candidateSet),
+  );
 }

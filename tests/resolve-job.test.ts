@@ -24,32 +24,32 @@ describe('resolveJob', () => {
   });
 
   it('builds freeDay job', () => {
-    const job = resolveFreeDayJob({ time: '09:00' }, 'Asia/Shanghai');
+    const job = resolveFreeDayJob('0 0 9 * * *', 'Asia/Shanghai');
     expect(job).toEqual({
       kind: 'freeDay',
-      time: '09:00',
+      cron: '0 0 9 * * *',
       timezone: 'Asia/Shanghai',
     });
   });
 
   it('builds holiday job with festivals in input', () => {
     const job = resolveHolidayJob(
-      { time: '09:00', festivals: ['国庆节'], everyDayOfHoliday: true },
+      { cron: '0 0 9 * * *', festivals: ['国庆节'], everyDayOfHoliday: true },
       'Asia/Shanghai',
     );
     expect(job).toMatchObject({
       kind: 'holiday',
-      time: '09:00',
+      cron: '0 0 9 * * *',
       festivals: ['国庆节'],
       everyDayOfHoliday: true,
     });
   });
 
   it('builds workday job', () => {
-    const job = resolveWorkdayJob({ time: '09:00' }, 'Asia/Shanghai');
+    const job = resolveWorkdayJob('0 0 9 * * *', 'Asia/Shanghai');
     expect(job).toEqual({
       kind: 'workday',
-      time: '09:00',
+      cron: '0 0 9 * * *',
       timezone: 'Asia/Shanghai',
     });
   });
@@ -62,16 +62,16 @@ describe('resolveJob', () => {
     expect(() => resolveLunarJob('0 0 * 1 1 *', 'Asia/Shanghai')).toThrow(InvalidScheduleError);
   });
 
-  it('throws on invalid time format', () => {
-    expect(() => resolveHolidayJob({ time: '9am' }, 'Asia/Shanghai')).toThrow(
+  it('throws on invalid calendar cron', () => {
+    expect(() => resolveHolidayJob({ cron: '9am' }, 'Asia/Shanghai')).toThrow(
       InvalidScheduleError,
     );
-    expect(() => resolveFreeDayJob({ time: '9am' }, 'Asia/Shanghai')).toThrow(
-      InvalidScheduleError,
-    );
-    expect(() => resolveWorkdayJob({ time: '9am' }, 'Asia/Shanghai')).toThrow(
-      InvalidScheduleError,
-    );
+    expect(() => resolveFreeDayJob('9am', 'Asia/Shanghai')).toThrow(InvalidScheduleError);
+    expect(() => resolveWorkdayJob('9am', 'Asia/Shanghai')).toThrow(InvalidScheduleError);
+  });
+
+  it('throws when calendar cron specifies day field', () => {
+    expect(() => resolveWorkdayJob('0 0 9 1 * *', 'Asia/Shanghai')).toThrow(InvalidScheduleError);
   });
 
   it('throws when lunar cron has wildcard in second', () => {

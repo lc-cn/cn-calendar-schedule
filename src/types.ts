@@ -1,6 +1,6 @@
 import type { JobStore } from './store/types.js';
 
-export type ScheduleKind = 'solar' | 'lunar' | 'holiday' | 'freeDay' | 'workday';
+export type ScheduleKind = 'solar' | 'lunar' | 'holiday' | 'freeDay' | 'workday' | 'scatter';
 
 export type FestivalName =
   | '元旦'
@@ -23,6 +23,10 @@ export interface JobContext {
   lunarText: string;
   /** 节假日名（法定假日连休区间内时有值，普通周末为 undefined） */
   festival?: FestivalName;
+  /** scatter：当天第几次触发（1-based） */
+  scatterIndex?: number;
+  /** scatter：当天计划触发总次数 */
+  scatterCount?: number;
 }
 
 export type JobHandler = (ctx: JobContext) => void | Promise<void>;
@@ -51,29 +55,56 @@ export interface JobRegisterExtras {
   payload?: unknown;
 }
 
-export interface TimeInput {
-  time: string;
-}
-
-export interface HolidayInput extends TimeInput {
+/** holiday 专用：6 段 cron（日/月/周须为 `*`）+ 可选节日过滤 */
+export interface HolidayInput {
+  cron: string;
   festivals?: FestivalFilter;
   everyDayOfHoliday?: boolean;
 }
 
-export type FreeDayInput = TimeInput;
+export type ScatterDayFilter =
+  | 'all'
+  | 'workday'
+  | 'freeDay'
+  | { kind: 'holiday'; festivals?: FestivalFilter; everyDayOfHoliday?: boolean };
+
+export interface ScatterInput {
+  window: { start: string; end: string };
+  count: number;
+  on: ScatterDayFilter;
+}
+
+/** scatter 任务运行进度，存于 job payload.scatter */
+export interface ScatterRunState {
+  dateKey: string;
+  firedCount: number;
+}
+
+export interface ScatterJobPayload {
+  scatter: ScatterRunState;
+}
 
 export type ResolvedJob =
   | { kind: 'solar'; cron: string; timezone: string }
   | { kind: 'lunar'; cron: string; timezone: string }
   | {
       kind: 'holiday';
-      time: string;
+      cron: string;
       festivals: FestivalFilter;
       everyDayOfHoliday: boolean;
       timezone: string;
     }
-  | { kind: 'freeDay'; time: string; timezone: string }
-  | { kind: 'workday'; time: string; timezone: string };
+  | { kind: 'freeDay'; cron: string; timezone: string }
+  | { kind: 'workday'; cron: string; timezone: string }
+  | {
+      kind: 'scatter';
+      window: { start: string; end: string };
+      windowStartSec: number;
+      windowEndSec: number;
+      count: number;
+      on: ScatterDayFilter;
+      timezone: string;
+    };
 
 export class InvalidScheduleError extends Error {
   constructor(message: string) {
@@ -83,3 +114,6 @@ export class InvalidScheduleError extends Error {
 }
 
 export const DEFAULT_TIMEZONE = 'Asia/Shanghai';
+
+/** 工作日/休息日/法定假日默认触发时刻：每天 09:00:00（日/月/周由语义决定） */
+export const DEFAULT_CALENDAR_CRON = '0 0 9 * * *';

@@ -108,6 +108,40 @@ export function parseCron(expr: string): CronFields {
   };
 }
 
+// calendar cron：日/月/周须为 *；秒/分/时可含步进（与 solar 相同）
+export function validateCalendarCron(cron: string): CronFields {
+  const parts = cron.trim().split(/\s+/);
+  if (parts.length !== 6) {
+    throw new Error(`Cron expression must have 6 fields, got ${parts.length}`);
+  }
+  for (let i = 3; i < 6; i++) {
+    if (parts[i] !== '*') {
+      throw new Error('Calendar cron requires * for day, month, and weekday fields');
+    }
+  }
+
+  return parseCron(cron);
+}
+
+/** 从「仅含精确时刻」的 calendar cron 提取时/分/秒；步进表达式请用 parseCron */
+export function parseCronTime(cron: string): { hour: number; minute: number; second: number } {
+  const fields = validateCalendarCron(cron);
+  for (const [name, values] of [
+    ['second', fields.second],
+    ['minute', fields.minute],
+    ['hour', fields.hour],
+  ] as const) {
+    if (values.length !== 1) {
+      throw new Error(`parseCronTime requires exact ${name}; use parseCron for step expressions`);
+    }
+  }
+  return {
+    second: fields.second[0],
+    minute: fields.minute[0],
+    hour: fields.hour[0],
+  };
+}
+
 export function matchesCron(fields: CronFields, date: Date, timezone: string): boolean {
   const parts = getCronDateParts(date, timezone);
   const dow = parts.dayOfWeek === 0 ? 7 : parts.dayOfWeek;

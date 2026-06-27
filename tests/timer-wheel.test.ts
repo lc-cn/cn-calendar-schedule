@@ -116,6 +116,24 @@ describe('TimerWheel', () => {
     expect(fired).toHaveLength(0);
   });
 
+  it('skips cancelled jobs still present in heap', async () => {
+    vi.setSystemTime(new Date('2025-06-27T08:59:00+08:00'));
+    const fired: string[] = [];
+    const wheel = new TimerWheel(async (j) => {
+      fired.push(j.id);
+    });
+
+    const scheduled = job('j1', new Date('2025-06-27T09:00:00+08:00'));
+    wheel.add(scheduled);
+    scheduled.cancelled = true;
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    await Promise.resolve();
+
+    expect(fired).toEqual([]);
+    wheel.stop();
+  });
+
   it('add after stop does not schedule', () => {
     const wheel = new TimerWheel(() => {});
     wheel.stop();

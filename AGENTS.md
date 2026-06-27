@@ -21,13 +21,15 @@
 | 命令 | 用途 |
 |------|------|
 | `pnpm install` | 安装依赖（需 pnpm 11+，见 `packageManager` 字段） |
-| `pnpm test` | 运行 Vitest（180 项，提交前必须通过） |
+| `pnpm test` | 运行 Vitest（提交前必须通过） |
 | `pnpm run test:coverage` | 覆盖率报告（lines/functions/statements ≥90%，branches ≥88%） |
 | `pnpm run build` | tsup 构建 `dist/`（ESM/CJS/UMD + 类型） |
 | `pnpm exec tsc --noEmit` | 类型检查 |
 | `pnpm run sync-holidays` | 批量同步 bundled 节假日 JSON + 重建 registry（CI 同款） |
 | `pnpm run sync-holiday -- 2027` | 从 holiday-cn 同步单年 bundled JSON（维护者） |
-| `pnpm run generate-holiday-registry` | 根据 `holidays/*.json` 重建 `holiday-registry.ts` imports |
+| `pnpm run example:basic` | 运行 [examples/basic.mjs](../examples/basic.mjs) |
+| `pnpm run example:persist` | 运行 [examples/persist.mjs](../examples/persist.mjs) |
+| `pnpm run example:scatter` | 运行 [examples/scatter.mjs](../examples/scatter.mjs) |
 
 ## CI/CD
 
@@ -47,10 +49,10 @@ npm 需在包 Settings 为 `publish.yml` 配置 **Trusted Publisher**（GitHub A
 src/
 ├── scheduler.ts          # CalendarScheduler：任务注册、TimerWheel、store、handlers
 ├── types.ts              # 公开类型
-├── resolve-job.ts        # solar/lunar/holiday/freeDay/workday → ResolvedJob
+├── resolve-job.ts        # solar/lunar/holiday/freeDay/workday/scatter → ResolvedJob
 ├── dispatch.ts           # getNextRun / isJobDue 按 kind 分发
 ├── context.ts            # JobContext（solarText, lunarText, festival）
-├── job.ts                # InternalJob、JobHeap
+├── job.ts                # InternalJob、JobHeap、resolveHandlerKey
 ├── resolvers/            # 各 kind 的 next-run 实现
 ├── parsers/cron.ts       # 6 段 cron 解析
 ├── data/
@@ -62,6 +64,7 @@ src/
 └── timer/timer-wheel.ts  # 单定时器 min-heap 调度
 
 tests/                    # Vitest；临时文件在 tests/.tmp/
+examples/                 # 可运行示例（basic / persist / scatter）
 scripts/sync-holiday.mjs  # 维护者同步 bundled JSON
 ```
 
@@ -69,9 +72,9 @@ scripts/sync-holiday.mjs  # 维护者同步 bundled JSON
 
 ### 调度流程
 
-1. `schedule.solar/lunar/holiday/freeDay/workday(cron|input, handler|options)` 注册任务
+1. `schedule.solar/lunar/holiday/freeDay/workday/scatter(cron|time|input, handler, key?, extras?)` 注册任务
 2. `resolve*Job` 产出扁平 `ResolvedJob`
-3. `getNextRun` 按 `kind` 调用对应 resolver
+3. `getNextRun` 按 `kind` 调用对应 resolver（scatter 需 `jobId` + `payload.scatter` 进度）
 4. `TimerWheel` 按 `nextRunAt` 触发 → `buildJobContext` → handler
 5. 周期性任务重算 next run；一次性任务 nextRun=null 时移除
 
@@ -113,7 +116,12 @@ scheduler.solar('0 0 9 * * *', handler, 'daily', { id: '...' });
 - **holiday**：仅法定假日；`festivals` 过滤；`everyDayOfHoliday` 控制连休区间
 - **freeDay**：`!isWorkday`（含周末 + 法定假日，排除补班）
 - **workday**：`isWorkday`（含补班）
+- **scatter**：窗口内每天确定性随机 N 次；`on` 过滤日历日；进度 `payload.scatter`
 - **lunar cron**：6 段同 solar，日/月按农历；秒分时须为精确值
+- **calendar cron**：日/月/周须为 `*`；秒/分/时与 solar 相同（含 `*/N`）；`cron.at()` / `cron.everyMinutes()` 等
+- **holiday**：`.holiday(cron, …)` 或 `.holiday({ cron, festivals?, everyDayOfHoliday? }, …)`
+- **freeDay / workday**：`.freeDay(cron, …)` / `.workday(cron, …)`；`resolveFreeDayJob(cron, tz)` / `resolveWorkdayJob(cron, tz)`
+- **scatter**：`.scatter(ScatterInput, …)`；`resolveScatterJob(input, tz)`；`scatter.daily()` helper
 
 ## 开发原则
 
@@ -122,7 +130,7 @@ scheduler.solar('0 0 9 * * *', handler, 'daily', { id: '...' });
 1. 明确主路径示例（README 片段）
 2. 明确非目标（如运行时不可写 bundled 路径）
 3. 实现 + 测试
-4. 同步 README、`package.json` description/keywords、`src/index.ts` 导出
+4. 同步 README、`package.json` description/keywords、`src/index.ts` 导出、[examples/](../examples/)
 
 ### 代码风格
 

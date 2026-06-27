@@ -27,6 +27,9 @@
     "sync-holiday": "pnpm run build && node scripts/sync-holiday.mjs",
     "sync-holidays": "pnpm run build && node scripts/sync-holidays-auto.mjs",
     "generate-holiday-registry": "node scripts/generate-holiday-registry.mjs",
+    "example:basic": "pnpm run build && node examples/basic.mjs",
+    "example:persist": "pnpm run build && node examples/persist.mjs",
+    "example:scatter": "pnpm run build && node examples/scatter.mjs",
     "prepublishOnly": "pnpm run build && pnpm run test:coverage"
   },
   "keywords": [

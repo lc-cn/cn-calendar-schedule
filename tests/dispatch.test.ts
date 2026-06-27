@@ -16,17 +16,17 @@ describe('dispatch', () => {
     viSafeHoliday();
     expect(
       isJobDue(
-        { kind: 'holiday', time: '09:00', festivals: ['国庆节'], everyDayOfHoliday: false, timezone: TZ },
+        { kind: 'holiday', cron: '0 0 9 * * *', festivals: ['国庆节'], everyDayOfHoliday: false, timezone: TZ },
         new Date('2024-10-01T09:00:00+08:00'),
       ),
     ).toBe(true);
 
     expect(
-      isJobDue({ kind: 'freeDay', time: '09:00', timezone: TZ }, new Date('2025-06-28T09:00:00+08:00')),
+      isJobDue({ kind: 'freeDay', cron: '0 0 9 * * *', timezone: TZ }, new Date('2025-06-28T09:00:00+08:00')),
     ).toBe(true);
 
     expect(
-      isJobDue({ kind: 'workday', time: '09:00', timezone: TZ }, new Date('2025-06-27T09:00:00+08:00')),
+      isJobDue({ kind: 'workday', cron: '0 0 9 * * *', timezone: TZ }, new Date('2025-06-27T09:00:00+08:00')),
     ).toBe(true);
 
     expect(

@@ -3,6 +3,7 @@ dist/
 coverage/
 package-lock.json
 tests/.tmp/
+examples/.tmp/
 .cn-calendar-schedule/
 *.log
 .DS_Store

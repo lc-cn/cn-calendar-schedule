@@ -38,7 +38,7 @@ describe('holiday registry / updateData', () => {
     expect(getMinHolidayYear()).toBe(2019);
     expect(getMaxHolidayYear()).toBe(2027);
 
-    const job = resolveHolidayJob({ time: '09:00', festivals: ['国庆节'] }, TZ);
+    const job = resolveHolidayJob({ cron: '0 0 9 * * *', festivals: ['国庆节'] }, TZ);
     const next = getNextRun(job, at('2027-09-30T10:00:00+08:00'));
     expect(next?.toISOString()).toBe(at('2027-10-01T09:00:00+08:00').toISOString());
   });

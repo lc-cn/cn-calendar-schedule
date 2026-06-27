@@ -15,9 +15,9 @@ describe('mixed mode scheduler', () => {
 
     const solar = resolveSolarJob('0 0 9 * * *', 'Asia/Shanghai');
     const lunar = resolveLunarJob('0 0 0 1 1 *', 'Asia/Shanghai');
-    const holiday = resolveHolidayJob({ time: '09:00' }, 'Asia/Shanghai');
-    const freeDay = resolveFreeDayJob({ time: '09:00' }, 'Asia/Shanghai');
-    const workday = resolveWorkdayJob({ time: '09:00' }, 'Asia/Shanghai');
+    const holiday = resolveHolidayJob({ cron: '0 0 9 * * *' }, 'Asia/Shanghai');
+    const freeDay = resolveFreeDayJob('0 0 9 * * *', 'Asia/Shanghai');
+    const workday = resolveWorkdayJob('0 0 9 * * *', 'Asia/Shanghai');
 
     expect(solar.kind).toBe('solar');
     expect(lunar.kind).toBe('lunar');

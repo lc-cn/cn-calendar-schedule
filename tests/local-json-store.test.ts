@@ -26,7 +26,7 @@ describe('LocalJsonJobStore', () => {
   const sampleJob = (): StoredJob => ({
     id: 'job-1',
     handlerKey: 'report',
-    resolved: { kind: 'workday', time: '09:00', timezone: 'Asia/Shanghai' },
+    resolved: { kind: 'workday', cron: '0 0 9 * * *', timezone: 'Asia/Shanghai' },
     nextRunAt: '2025-01-02T01:00:00.000Z',
     cancelled: false,
     updatedAt: new Date().toISOString(),
@@ -109,6 +109,21 @@ describe('LocalJsonJobStore', () => {
     await store.upsert({ ...sampleJob(), handlerKey: 'updated' });
     const jobs = await store.load();
     expect(jobs[0].handlerKey).toBe('updated');
+  });
+
+  it('loads empty list when jobs key is missing', async () => {
+    tempDir = join(TEST_TMP_ROOT, `missing-key-${Date.now()}`);
+    await mkdir(tempDir, { recursive: true });
+    jobsPath = join(tempDir, 'jobs.json');
+    await writeFile(jobsPath, '{}');
+    const store = createLocalJsonStore({ path: jobsPath });
+    expect(await store.load()).toEqual([]);
+  });
+
+  it('uses default jobs path when options are omitted', async () => {
+    const store = createLocalJsonStore();
+    const jobs = await store.load();
+    expect(Array.isArray(jobs)).toBe(true);
   });
 
   it('loads empty list when default file is missing', async () => {

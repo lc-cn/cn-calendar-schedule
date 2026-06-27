@@ -72,29 +72,6 @@ export function formatDateKey(date: Date, timezone: string): string {
   return formatter.format(date);
 }
 
-export function parseTimeString(time: string): { hour: number; minute: number; second: number } {
-  const trimmed = time.trim();
-  const match =
-    /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/.exec(trimmed);
-  if (!match) {
-    throw new Error(`Invalid time format: ${time}, expected HH:mm or HH:mm:ss`);
-  }
-  const hour = parseInt(match[1], 10);
-  const minute = parseInt(match[2], 10);
-  const second = match[3] !== undefined ? parseInt(match[3], 10) : 0;
-  if (
-    hour < 0 ||
-    hour > 23 ||
-    minute < 0 ||
-    minute > 59 ||
-    second < 0 ||
-    second > 59
-  ) {
-    throw new Error(`Invalid time value: ${time}`);
-  }
-  return { hour, minute, second };
-}
-
 export function getDatePartsInTimezone(
   date: Date,
   timezone: string,

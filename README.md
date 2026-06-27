@@ -2,7 +2,7 @@
 
 > **中国日历语义调度器** — 在国历、农历、法定假日、休息日、工作日这些概念上定任务，而不是在 cron 里拼补班和连休逻辑。
 
-零运行时依赖的 TypeScript 模块。同一 `CalendarScheduler` 可混用五种调度；handler 自带国历/农历文本与节日名；节假日数据内置并可从国务院公示（gov.cn）自动拉取更新。
+零运行时依赖的 TypeScript 模块。同一 `CalendarScheduler` 可混用六种调度；handler 自带国历/农历文本与节日名；节假日数据内置并可从国务院公示（gov.cn）自动拉取更新。
 
 | 对比 | 通用 cron 库 | cn-calendar-schedule |
 |------|-------------|----------------------|
@@ -37,25 +37,41 @@ schedule.solar('0 0 9 * * 1', () => console.log('周报'));
 schedule.lunar('0 0 0 1 1 *', () => console.log('春节'));
 schedule.lunar('0 0 9 15 1 *', () => console.log('元宵'));
 
-// 法定假日 / 休息日 / 工作日：time 为 HH:mm 或 HH:mm:ss（省略秒时默认为 00）
-schedule.holiday('09:00', () => {}); // 09:00:00
-schedule.holiday('09:00:30', () => {}); // 精确到秒
+// 法定假日 / 休息日 / 工作日：calendar cron（日/月/周须为 *，只表达触发时刻）
+const CALENDAR_CRON = '0 0 9 * * *'; // 每天 09:00:00（哪一天由语义决定）
+schedule.holiday(CALENDAR_CRON, () => {});
+schedule.holiday('30 0 9 * * *', () => {}); // 09:00:30
 schedule.holiday(
-  { time: '09:00', festivals: ['春节', '国庆节'], everyDayOfHoliday: true },
+  { cron: CALENDAR_CRON, festivals: ['春节', '国庆节'], everyDayOfHoliday: true },
   () => {},
 ); // 需 festivals 等选项时用对象
 
-schedule.freeDay('09:00', () => console.log('休息日提醒'));
-schedule.workday('09:00', (ctx) => {
+schedule.freeDay(CALENDAR_CRON, () => console.log('休息日提醒'));
+schedule.workday(CALENDAR_CRON, (ctx) => {
   console.log(ctx.solarText, ctx.lunarText); // 2025年6月27日 乙巳年六月初三
 });
 ```
 
-`holiday` / `freeDay` / `workday` 按**日历日 + 时刻**触发（`HH:mm` 或 `HH:mm:ss`）；`solar` / `lunar` 则用 **6 段 cron（含秒）**。
+五种调度均使用 **6 段 cron（含秒）**。`holiday` / `freeDay` / `workday` 的 **日/月/周必须为 `*`**，「哪一天」由日历语义决定；`solar` / `lunar` 则按 cron 的日/月/周匹配。
 
-五种调度方法签名统一为 **`(cron | time | input, handler, key?, extras?)`**：`key` 默认取 `handler.name`；匿名函数需显式传 `key` 才能持久化。详见 [注册与持久化](#注册与持久化)。
+五种调度方法签名统一为 **`(cron | input, handler, key?, extras?)`**：`key` 默认取 `handler.name`；匿名函数需显式传 `key` 才能持久化。详见 [注册与持久化](#注册与持久化)。
 
 所有 `handler` 均收到 [`JobContext`](#jobcontext-handler-上下文)（含国历/农历文本、可选节日名等），详见下文。
+
+## 选型速查
+
+| 你想… | 用法 | 时间格式 |
+|--------|------|----------|
+| 每周一 9 点 | `schedule.solar('0 0 9 * * 1', handler)` | 6 段 cron（含秒） |
+| 农历正月十五 9 点 | `schedule.lunar('0 0 9 15 1 *', handler)` | 6 段 cron，日/月为农历 |
+| 每个**工作日** 9 点（含补班） | `schedule.workday('0 0 9 * * *', handler)` | calendar cron |
+| 每个**休息日** 9 点（周末+法定假，不含补班） | `schedule.freeDay('0 0 9 * * *', handler)` | calendar cron |
+| 每个法定假日的**节日当天** 9 点 | `schedule.holiday('0 0 9 * * *', handler)` | calendar cron |
+| 仅国庆 / 春节等 + 连休每天 | `schedule.holiday({ cron, festivals, everyDayOfHoliday: true }, handler)` | `HolidayInput` |
+| 工作日窗口内**随机 N 次**（如群冒泡） | `schedule.scatter({ window, count: 3, on: 'workday' }, handler)` | `ScatterInput` |
+| 进程重启后仍保留任务 | 配置 `store` + `(…, handler, key)` | 见 [注册与持久化](#注册与持久化) |
+
+可运行示例：`pnpm run example:basic` / `pnpm run example:persist` / `pnpm run example:scatter`（源码 [examples/](./examples/)）。
 
 ## 注册与持久化
 
@@ -67,9 +83,9 @@ function dailyReport(ctx) {
 // 命名函数：key 默认为 'dailyReport'，配置 store 时自动持久化
 schedule.solar('0 0 9 * * 1', dailyReport);
 schedule.lunar('0 0 9 15 1 *', dailyReport);
-schedule.holiday('09:00', dailyReport);
-schedule.freeDay('09:00', dailyReport);
-schedule.workday('09:00', dailyReport);
+schedule.holiday('0 0 9 * * *', dailyReport);
+schedule.freeDay('0 0 9 * * *', dailyReport);
+schedule.workday('0 0 9 * * *', dailyReport);
 
 // 显式 key + 任务 id
 schedule.solar('0 0 9 * * *', dailyReport, 'daily-report', { id: 'daily' });
@@ -78,7 +94,7 @@ schedule.solar('0 0 9 * * *', dailyReport, 'daily-report', { id: 'daily' });
 schedule.solar('0 0 9 * * *', (ctx) => console.log(ctx.jobId));
 
 // 匿名 handler 但需持久化：必须显式 key
-schedule.workday('09:00', (ctx) => {}, 'workday-reminder', { id: 'wd-1' });
+schedule.workday('0 0 9 * * *', (ctx) => {}, 'workday-reminder', { id: 'wd-1' });
 ```
 
 | 模式 | 写法 | 重启后 |
@@ -107,13 +123,13 @@ scheduler.registerHandler('weekly', (ctx) => console.log(ctx.jobId));
 
 ## holiday 法定假日调度
 
-`schedule.holiday(time | input, handler, …)` 仅在**国务院法定假日**触发，不含普通周六、周日（普通周末请用 `freeDay`）。
+`schedule.holiday(cron | input, handler, …)` 仅在**国务院法定假日**触发，不含普通周六、周日（普通周末请用 `freeDay`）。
 
-第一个参数支持 **`'HH:mm'` / `'HH:mm:ss'` 字符串**或 **`HolidayInput` 对象**（需 `festivals`、`everyDayOfHoliday` 时用对象）：
+第一个参数为 **calendar cron 字符串**或 **`HolidayInput` 对象**（需 `festivals`、`everyDayOfHoliday` 时用对象）：
 
 | 字段 | 类型 | 默认 | 说明 |
 |------|------|------|------|
-| `time` | `string` | — | 触发时刻，**`HH:mm` 或 `HH:mm:ss`**（省略秒时默认为 `00`） |
+| `cron` | `string` | — | 6 段 calendar cron；日/月/周须为 `*`，秒分时为精确值 |
 | `festivals` | `'all'` 或 `FestivalName[]` | `'all'` | 过滤参与调度的法定假日类型（见下表） |
 | `everyDayOfHoliday` | `boolean` | `false` | 是否覆盖整个连休区间，而非仅节日当天 |
 
@@ -143,24 +159,24 @@ scheduler.registerHandler('weekly', (ctx) => console.log(ctx.jobId));
 | `['国庆节']` 等 | `true` | 对应节日的**整个连休区间**均触发（如国庆 10/1–10/7） |
 
 ```typescript
-// 每个法定假日的节日当天 09:00
-schedule.holiday('09:00', handler);
+// 每个法定假日的节日当天 09:00:00
+schedule.holiday('0 0 9 * * *', handler);
 
-// 仅国庆当天 09:00
-schedule.holiday({ time: '09:00', festivals: ['国庆节'] }, handler);
+// 仅国庆当天 09:00:00
+schedule.holiday({ cron: '0 0 9 * * *', festivals: ['国庆节'] }, handler);
 
-// 国庆整个连休区间每天 09:00
+// 国庆整个连休区间每天 09:00:00
 schedule.holiday(
-  { time: '09:00', festivals: ['国庆节'], everyDayOfHoliday: true },
+  { cron: '0 0 9 * * *', festivals: ['国庆节'], everyDayOfHoliday: true },
   handler,
 );
 ```
 
 ## freeDay 休息日调度
 
-`schedule.freeDay(time, handler, …)` 在**休息日**触发。休息日 = 法定假日 + 正常周六、周日，**不含**补班日。
+`schedule.freeDay(cron, handler, …)` 在**休息日**触发。休息日 = 法定假日 + 正常周六、周日，**不含**补班日。
 
-第一个参数支持 **`'HH:mm'` / `'HH:mm:ss'` 字符串**或 `{ time: 'HH:mm' }`。
+第一个参数为 **calendar cron 字符串**（日/月/周须为 `*`）。
 
 与 `holiday` / `workday` 的关系：
 
@@ -171,8 +187,8 @@ schedule.holiday(
 | `workday` | 所有工作日（`isWorkday`，含补班） |
 
 ```typescript
-schedule.freeDay('09:00', handler);
-schedule.workday('09:00', handler);
+schedule.freeDay('0 0 9 * * *', handler);
+schedule.workday('0 0 9 * * *', handler);
 ```
 
 辅助函数 `isFreeDay(date, timezone?)` 与 `isWorkday` 互为补集。
@@ -239,9 +255,11 @@ await updateData(
 pnpm run sync-holiday -- 2027
 ```
 
-## cron 格式（solar / lunar）
+## cron 格式
 
 **6 段：`秒 分 时 日 月 周`**
+
+### solar / lunar
 
 | 段 | solar | lunar |
 |----|-------|-------|
@@ -256,6 +274,80 @@ schedule.lunar('0 0 9 15 1 *', handler);  // 农历正月十五 09:00:00
 
 农历 cron 要求秒/分/时为精确值（不支持 `*`）。
 
+**步进语法**：秒/分/时均支持 `*/N`、`1-5/2`、`10-20/5` 等（与 solar 相同）。**日/月/周**在 calendar 类 job 中须为 `*`，在 solar/lunar 中按各自规则解读。
+
+```typescript
+schedule.solar(cron.everyMinutes(10), handler);
+schedule.workday(cron.everyMinutes(10), handler); // 仅在工作日每 10 分钟
+schedule.freeDay(cron.everyMinutes(10), handler);  // 仅在休息日每 10 分钟
+```
+
+### 工具函数 `cron`
+
+```typescript
+import { cron } from 'cn-calendar-schedule';
+
+cron.at(9);                        // '0 0 9 * * *' — calendar（workday/freeDay/holiday）
+cron.at(9, 30);                    // '0 30 9 * * *'
+cron.at(9, 0, 30);                 // '30 0 9 * * *'
+cron.calendar(9);                  // 同上，语义更明确
+cron.at(9, 0, { dayOfWeek: 1 });   // '0 0 9 * * 1' — 每周一（solar）
+
+cron.everyMinutes(10);             // '0 */10 * * * *'
+cron.everySeconds(10);             // '*/10 * * * * *'
+cron.everyHours(2);                // '0 0 */2 * * *'
+
+schedule.workday(cron.at(9), handler);
+schedule.workday(cron.everyMinutes(10), handler);
+schedule.solar(cron.at(9, 0, { dayOfWeek: 1 }), handler);
+```
+
+也可按需导入 `at`、`calendar`、`everyMinutes` 等。
+
+### holiday / freeDay / workday（calendar cron）
+
+日/月/周**必须为 `*`**；「哪一天」由 `holiday` / `freeDay` / `workday` 语义决定。秒/分/时的写法与 solar **完全一致**（含 `*/N` 步进）。
+
+```typescript
+import { cron } from 'cn-calendar-schedule';
+
+const at9 = cron.at(9);
+schedule.workday(at9, handler);
+schedule.workday(cron.everyMinutes(10), handler); // 每个工作日内每 10 分钟
+
+schedule.freeDay(cron.at(9), handler);
+schedule.holiday({ cron: at9, festivals: ['国庆节'] }, handler);
+```
+
+### Scatter 随机冒泡
+
+在指定**日历日**与**时段窗口**内，每天**确定性随机**生成 N 个触发时刻（同一 `jobId + dateKey` 重启后不变）。进度通过 `payload.scatter` 持久化 `{ dateKey, firedCount }`。
+
+| 需求 | 推荐方案 |
+|------|----------|
+| 工作日内每 10 分钟**固定**间隔 | `schedule.workday(cron.everyMinutes(10), handler)` |
+| 工作日内**随机 3 次**、时间不固定 | `schedule.scatter({ window, count: 3, on: 'workday' }, handler)` |
+
+```typescript
+import { scatter } from 'cn-calendar-schedule';
+
+// 工作日 09:00–22:00 内随机冒泡 3 次（如群机器人）
+schedule.scatter(
+  scatter.daily({ window: { start: '09:00', end: '22:00' }, count: 3, on: 'workday' }),
+  (ctx) => {
+    console.log(`第 ${ctx.scatterIndex}/${ctx.scatterCount} 次`, ctx.solarText);
+  },
+  'group-bubble',
+  { id: 'bubble-1' },
+);
+
+// on: 'all' | 'workday' | 'freeDay' | { kind: 'holiday'; festivals?; everyDayOfHoliday? }
+```
+
+可运行示例：`pnpm run example:scatter`（源码 [examples/scatter.mjs](./examples/scatter.mjs)）。
+
+`parseCronTime()` 仅适用于**精确时刻**的 calendar cron；步进表达式请用 `parseCron()`。
+
 ## 三种引入方式
 
 ```typescript
@@ -265,9 +357,9 @@ import { CalendarScheduler } from 'cn-calendar-schedule';
 // CJS
 const { CalendarScheduler } = require('cn-calendar-schedule');
 
-// UMD
-// <script src="https://unpkg.com/cn-calendar-schedule/dist/index.global.js"></script>
-// const s = new CnCalendarSchedule.CalendarScheduler();
+// UMD（浏览器 `<script>`，全局变量 `CnCalendarSchedule`）
+// <script src="https://unpkg.com/cn-calendar-schedule/dist/index.umd.js"></script>
+// const schedule = new CnCalendarSchedule.CalendarScheduler();
 ```
 
 ## 公开 API
@@ -280,13 +372,19 @@ const { CalendarScheduler } = require('cn-calendar-schedule');
 | `.handlers` | 内置 `HandlerRegistry`，可 `.handlers.register(...)` |
 | `.solar(cron, handler, key?, extras?)` | 国历 cron 任务 |
 | `.lunar(cron, handler, key?, extras?)` | 农历 cron 任务 |
-| `.holiday(time \| input, handler, key?, extras?)` | 法定假日；`time` 可传 `'HH:mm'` 或 `HolidayInput` |
-| `.freeDay(time, handler, key?, extras?)` | 休息日；`time` 可传 `'HH:mm'` 或 `{ time }` |
-| `.workday(time, handler, key?, extras?)` | 工作日；`time` 可传 `'HH:mm'` 或 `{ time }` |
+| `.holiday(cron \| input, handler, key?, extras?)` | 法定假日；`cron` 为 calendar cron 或 `HolidayInput` |
+| `.freeDay(cron, handler, key?, extras?)` | 休息日；calendar cron |
+| `.workday(cron, handler, key?, extras?)` | 工作日；calendar cron |
+| `.scatter(input, handler, key?, extras?)` | 时段内随机 N 次；`ScatterInput` |
 | `.cancel(id)` / `.stop()` | 取消 / 停止 |
-| `resolveSolarJob` / `resolveLunarJob` / … | 纯函数，构建 `ResolvedJob` |
-| `getNextRun(job, from?)` | 计算下次触发时间 |
+| `resolveSolarJob` / `resolveLunarJob` / … / `resolveScatterJob` | 纯函数，构建 `ResolvedJob` |
+| `getNextRun(job, from?, options?)` | 计算下次触发时间；scatter 需 `{ jobId, scatterState? }` |
 | `parseCron(expr)` | 解析 6 段 cron |
+| `cron` / `at` / `calendar` / `everyMinutes` / … | 构造 cron 字符串（见上文） |
+| `validateCalendarCron(expr)` | 校验 holiday/freeDay/workday 专用 calendar cron |
+| `scatter` / `scatter.daily(input)` | 构造 `ScatterInput`（语义 helper） |
+| `parseCronTime(expr)` | 从 calendar cron 提取 `{ hour, minute, second }` |
+| `DEFAULT_CALENDAR_CRON` | 默认 `'0 0 9 * * *'` |
 | `isWorkday(date, timezone?)` | 判断是否为中国法定工作日 |
 | `isFreeDay(date, timezone?)` | 判断是否为休息日（`!isWorkday`） |
 | `buildJobContext(...)` | 手动构建 `JobContext`（含日历文本） |
@@ -309,11 +407,13 @@ const { CalendarScheduler } = require('cn-calendar-schedule');
 | 字段 | 类型 | 必有 | 说明 |
 |------|------|------|------|
 | `jobId` | `string` | ✓ | 任务 ID，与 `JobInfo.id` 相同，可用于 `cancel(id)` |
-| `kind` | `ScheduleKind` | ✓ | 调度类型：`'solar'` \| `'lunar'` \| `'holiday'` \| `'freeDay'` \| `'workday'` |
-| `scheduledAt` | `Date` | ✓ | 计划触发时刻（cron 指定的秒，或 `time` 对应的时/分/秒） |
+| `kind` | `ScheduleKind` | ✓ | 调度类型：`'solar'` \| `'lunar'` \| `'holiday'` \| `'freeDay'` \| `'workday'` \| `'scatter'` |
+| `scheduledAt` | `Date` | ✓ | 计划触发时刻（cron 指定的秒/分/时） |
 | `solarText` | `string` | ✓ | 国历文本，按调度器 `timezone` 格式化，如 `2024年10月1日` |
 | `lunarText` | `string` | ✓ | 农历文本，如 `甲辰年八月廿九`；超出农历表范围（1900–2100）时为 `''` |
 | `festival` | `FestivalName` | — | 节假日名；仅当 `scheduledAt` 落在法定假日连休区间内时有值 |
+| `scatterIndex` | `number` | — | scatter：当天第几次触发（1-based） |
+| `scatterCount` | `number` | — | scatter：当天计划总次数 |
 
 ### `festival` 何时有值
 
@@ -340,14 +440,14 @@ schedule.solar('0 0 9 * * 1', (ctx) => {
 });
 
 // holiday — 法定假日触发，festival 通常有值
-schedule.holiday('09:00', (ctx) => {
+schedule.holiday('0 0 9 * * *', (ctx) => {
   ctx.solarText;   // '2024年10月1日'
   ctx.lunarText;   // '甲辰年八月廿九'
   ctx.festival;    // '国庆节'
 });
 
 // freeDay — 普通周末无 festival；法定假日区间内的休息日有 festival
-schedule.freeDay('09:00', (ctx) => {
+schedule.freeDay('0 0 9 * * *', (ctx) => {
   ctx.festival;    // 周六 undefined；国庆 10/3 为 '国庆节'
 });
 ```
@@ -365,10 +465,13 @@ const ctx = buildJobContext('job-1', 'holiday', new Date('2024-10-01T09:00:00+08
 ## 类型
 
 - `SchedulerOptions` — `{ timezone?, onError?, store?, storePath?, handlers?, reconcileIntervalMs? }`
-- `ScheduleKind` — `'solar' | 'lunar' | 'holiday' | 'freeDay' | 'workday'`
-- `ResolvedJob` — 扁平五分支配置
-- `HolidayInput` — `{ time, festivals?, everyDayOfHoliday? }`；`time` 为 `HH:mm` 或 `HH:mm:ss`；`.holiday()` 亦接受 time 字符串
-- `TimeInput` / `FreeDayInput` — `{ time }`；`.freeDay()` / `.workday()` 亦接受 time 字符串
+- `ScheduleKind` — `'solar' | 'lunar' | 'holiday' | 'freeDay' | 'workday' | 'scatter'`
+- `ResolvedJob` — 扁平六分支配置
+- `ScatterInput` — `{ window: { start, end }, count, on }`；`on` 为 `ScatterDayFilter`
+- `ScatterDayFilter` — `'all' | 'workday' | 'freeDay' | { kind: 'holiday'; festivals?; everyDayOfHoliday? }`
+- `ScatterRunState` / `ScatterJobPayload` — 进度 `{ dateKey, firedCount }`，存于 `payload.scatter`
+- `HolidayInput` — `{ cron, festivals?, everyDayOfHoliday? }`；`cron` 为 calendar cron（日/月/周须为 `*`）
+- `DEFAULT_CALENDAR_CRON` — 默认触发时刻 `'0 0 9 * * *'`
 - `FestivalFilter` — `'all' | FestivalName[]`
 - `FestivalName` — `'元旦' | '春节' | '清明节' | '劳动节' | '端午节' | '中秋节' | '国庆节'`
 - `JobHandler` — `(ctx: JobContext) => void | Promise<void>`
@@ -409,9 +512,13 @@ pnpm install
 pnpm test
 pnpm run test:coverage
 pnpm run build
+pnpm run example:basic    # 可运行示例：注册 + 下次触发时间
+pnpm run example:persist  # 可运行示例：本地 JSON 持久化
 pnpm run sync-holiday -- 2027   # 单年同步
 pnpm run sync-holidays          # 批量同步（CI 同款）
 ```
+
+示例源码与说明：[examples/](./examples/)。
 
 CI/CD 与 npm 可信发布见 [.github/PUBLISHING.md](.github/PUBLISHING.md)。
 

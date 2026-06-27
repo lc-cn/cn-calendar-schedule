@@ -133,7 +133,7 @@ describe('CalendarScheduler edge cases', () => {
     vi.setSystemTime(new Date('2027-09-30T10:00:00+08:00'));
     const handler = vi.fn();
     const scheduler = new CalendarScheduler({ timezone: 'Asia/Shanghai' });
-    scheduler.holiday({ time: '09:00', festivals: ['国庆节'] }, handler);
+    scheduler.holiday({ cron: '0 0 9 * * *', festivals: ['国庆节'] }, handler);
 
     await updateData(2027, {
       holidayRanges: [{ start: '2027-10-01', end: '2027-10-07', festival: '国庆节' }],
@@ -204,7 +204,7 @@ describe('CalendarScheduler edge cases', () => {
       workdays: [],
     });
 
-    scheduler.holiday({ time: '09:00', festivals: ['元旦'] }, handler);
+    scheduler.holiday({ cron: '0 0 9 * * *', festivals: ['元旦'] }, handler);
     await updateData(2036, { holidayRanges: [], workdays: [] });
     await Promise.resolve();
     await Promise.resolve();
@@ -234,7 +234,7 @@ describe('CalendarScheduler edge cases', () => {
     });
     await scheduler.ready;
 
-    scheduler.holiday({ time: '09:00', festivals: ['元旦'] }, handler, 'h', { id: 'vanish-job' });
+    scheduler.holiday({ cron: '0 0 9 * * *', festivals: ['元旦'] }, handler, 'h', { id: 'vanish-job' });
     await vi.waitFor(async () => {
       expect(await readFile(jobsPath, 'utf8')).toContain('vanish-job');
     });
@@ -301,7 +301,7 @@ describe('CalendarScheduler edge cases', () => {
     const scheduler = new CalendarScheduler({ timezone: 'Asia/Shanghai' });
 
     scheduler.holiday(
-      { time: '09:00', festivals: ['国庆节'], everyDayOfHoliday: false },
+      { cron: '0 0 9 * * *', festivals: ['国庆节'], everyDayOfHoliday: false },
       handler,
     );
 

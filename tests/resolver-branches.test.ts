@@ -21,13 +21,13 @@ describe('resolver branch coverage', () => {
   });
 
   it('isHolidayDue returns false on wrong clock time', () => {
-    const job = resolveHolidayJob({ time: '09:00', festivals: ['国庆节'] }, TZ);
+    const job = resolveHolidayJob({ cron: '0 0 9 * * *', festivals: ['国庆节'] }, TZ);
     expect(isJobDue(job, at('2024-10-01T10:00:00+08:00'))).toBe(false);
   });
 
   it('holiday everyDayOfHoliday scans full ranges', () => {
     const job = resolveHolidayJob(
-      { time: '09:00', festivals: ['国庆节'], everyDayOfHoliday: true },
+      { cron: '0 0 9 * * *', festivals: ['国庆节'], everyDayOfHoliday: true },
       TZ,
     );
     expect(isJobDue(job, at('2024-10-03T09:00:00+08:00'))).toBe(true);
@@ -35,7 +35,7 @@ describe('resolver branch coverage', () => {
   });
 
   it('isFreeDayDue returns false on wrong clock time', () => {
-    const job = resolveFreeDayJob({ time: '09:00' }, TZ);
+    const job = resolveFreeDayJob('0 0 9 * * *', TZ);
     expect(isJobDue(job, at('2024-09-21T10:00:00+08:00'))).toBe(false);
   });
 

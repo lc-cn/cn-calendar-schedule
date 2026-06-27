@@ -52,7 +52,7 @@ describe('CalendarScheduler integration', () => {
     vi.setSystemTime(new Date('2024-10-01T08:00:00+08:00'));
     const scheduler = new CalendarScheduler({ timezone: 'Asia/Shanghai' });
 
-    scheduler.holiday({ time: '09:00', festivals: ['国庆节'] }, handler);
+    scheduler.holiday({ cron: '0 0 9 * * *', festivals: ['国庆节'] }, handler);
 
     await vi.advanceTimersByTimeAsync(3_600_000);
     await Promise.resolve();
@@ -82,7 +82,7 @@ describe('CalendarScheduler integration', () => {
     vi.setSystemTime(new Date('2024-09-29T08:00:00+08:00'));
     const scheduler = new CalendarScheduler({ timezone: 'Asia/Shanghai' });
 
-    scheduler.workday({ time: '09:00' }, handler);
+    scheduler.workday('0 0 9 * * *', handler);
 
     await vi.advanceTimersByTimeAsync(3_600_000);
     await Promise.resolve();
@@ -97,7 +97,7 @@ describe('CalendarScheduler integration', () => {
     vi.setSystemTime(new Date('2024-09-21T08:00:00+08:00'));
     const scheduler = new CalendarScheduler({ timezone: 'Asia/Shanghai' });
 
-    scheduler.freeDay({ time: '09:00' }, handler);
+    scheduler.freeDay('0 0 9 * * *', handler);
 
     await vi.advanceTimersByTimeAsync(3_600_000);
     await Promise.resolve();

@@ -9,7 +9,7 @@ alwaysApply: false
 ## 命令
 
 ```bash
-pnpm test              # vitest run（180 tests）
+pnpm test              # vitest run（227 项）
 pnpm run test:coverage # 覆盖率（阈值：lines/functions/statements 90%，branches 88%）
 pnpm run build         # tsup → ESM/CJS/UMD + .d.ts
 pnpm exec tsc --noEmit # 类型检查
@@ -26,8 +26,8 @@ pnpm exec tsc --noEmit # 类型检查
 
 功能/API 变更**必须**同步 README：
 
-- 快速开始、持久化、`updateData` 主路径
-- 公开 API 表、类型列表
+- 快速开始、[选型速查](#选型速查)、持久化、`updateData` 主路径
+- 公开 API 表、类型列表、[examples/](../examples/)
 - 定位 tagline 与 `package.json` description/keywords 一致
 
 ## Git

@@ -4,7 +4,6 @@ import {
   addSeconds,
   formatDateKey,
   getDatePartsInTimezone,
-  parseTimeString,
   startOfNextSecond,
   zonedTimeToUtc,
 } from '../src/utils/timezone.js';
@@ -12,19 +11,6 @@ import {
 const TZ = 'Asia/Shanghai';
 
 describe('timezone utils', () => {
-  it('parseTimeString accepts HH:mm and HH:mm:ss', () => {
-    expect(parseTimeString('09:00')).toEqual({ hour: 9, minute: 0, second: 0 });
-    expect(parseTimeString(' 23:59 ')).toEqual({ hour: 23, minute: 59, second: 0 });
-    expect(parseTimeString('09:30:45')).toEqual({ hour: 9, minute: 30, second: 45 });
-  });
-
-  it('parseTimeString rejects invalid format and values', () => {
-    expect(() => parseTimeString('9am')).toThrow(/Invalid time format/);
-    expect(() => parseTimeString('25:00')).toThrow(/Invalid time value/);
-    expect(() => parseTimeString('12:60')).toThrow(/Invalid time value/);
-    expect(() => parseTimeString('09:00:60')).toThrow(/Invalid time value/);
-  });
-
   it('zonedTimeToUtc converts local wall time', () => {
     const utc = zonedTimeToUtc(2025, 6, 27, 9, 0, 0, TZ);
     expect(getDatePartsInTimezone(utc, TZ)).toMatchObject({

@@ -51,7 +51,7 @@ describe('three-arg schedule API', () => {
     }
 
     const scheduler = new CalendarScheduler({ timezone: 'Asia/Shanghai' });
-    scheduler.holiday({ time: '09:00', festivals: ['国庆节'] }, nationalDay);
+    scheduler.holiday({ cron: '0 0 9 * * *', festivals: ['国庆节'] }, nationalDay);
 
     expect(scheduler.handlers.has('nationalDay')).toBe(true);
     await vi.advanceTimersByTimeAsync(60_000);
@@ -65,7 +65,7 @@ describe('three-arg schedule API', () => {
     const freeHandler = vi.fn();
     const scheduler = new CalendarScheduler({ timezone: 'Asia/Shanghai' });
 
-    scheduler.freeDay('09:00', freeHandler, 'weekend');
+    scheduler.freeDay('0 0 9 * * *', freeHandler, 'weekend');
     expect(scheduler.handlers.has('weekend')).toBe(true);
 
     await vi.advanceTimersByTimeAsync(60_000);
@@ -86,7 +86,7 @@ describe('three-arg schedule API', () => {
     });
     await scheduler.ready;
 
-    scheduler.workday({ time: '09:00' }, handler, 'workday', { id: 'workday-job' });
+    scheduler.workday('0 0 9 * * *', handler, 'workday', { id: 'workday-job' });
 
     expect(scheduler.handlers.has('workday')).toBe(true);
     await vi.waitFor(async () => {
@@ -109,13 +109,13 @@ describe('three-arg schedule API', () => {
     scheduler2.stop();
   });
 
-  it('accepts time string shorthand', () => {
+  it('accepts cron string for calendar jobs', () => {
     const scheduler = new CalendarScheduler({ timezone: 'Asia/Shanghai' });
     const handler = vi.fn();
 
-    scheduler.freeDay('09:00', handler);
-    scheduler.workday('09:00', handler, 'workday');
-    scheduler.holiday('09:00', handler, 'holiday');
+    scheduler.freeDay('0 0 9 * * *', handler);
+    scheduler.workday('0 0 9 * * *', handler, 'workday');
+    scheduler.holiday('0 0 9 * * *', handler, 'holiday');
 
     scheduler.stop();
   });

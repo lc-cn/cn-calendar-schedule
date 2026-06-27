@@ -44,7 +44,7 @@ await loadHolidayOverrides('.cn-calendar-schedule/holiday-overrides.json');
 
 ## 变更检查清单
 
-- [ ] README 快速开始示例可复制且与 API 一致
+- [ ] README / examples 示例可复制且与 API 一致
 - [ ] 公开 API 变更同步 `src/index.ts` 导出与类型
 - [ ] async API 变更检查所有调用方
 - [ ] 新增能力有测试；不添加 trivial 测试

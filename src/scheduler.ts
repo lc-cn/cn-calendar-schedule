@@ -11,9 +11,16 @@ import {
   resolveHolidayJob,
   resolveFreeDayJob,
   resolveLunarJob,
+  resolveScatterJob,
   resolveSolarJob,
   resolveWorkdayJob,
 } from './resolve-job.js';
+import { getScatterMeta } from './resolvers/scatter.js';
+import {
+  advanceScatterState,
+  getScatterState,
+  mergeScatterPayload,
+} from './utils/scatter-state.js';
 import {
   createHandlerRegistry,
   type HandlerRegistry,
@@ -28,8 +35,8 @@ import type {
   JobInfo,
   JobRegisterExtras,
   ResolvedJob,
+  ScatterInput,
   SchedulerOptions,
-  TimeInput,
 } from './types.js';
 import { DEFAULT_TIMEZONE } from './types.js';
 
@@ -128,7 +135,7 @@ export class CalendarScheduler {
     return this.register(resolveLunarJob(cron, this.timezone), handler, key, extras);
   }
 
-  holiday(time: string, handler: JobHandler, key?: string, extras?: JobRegisterExtras): JobInfo;
+  holiday(cron: string, handler: JobHandler, key?: string, extras?: JobRegisterExtras): JobInfo;
   holiday(input: HolidayInput, handler: JobHandler, key?: string, extras?: JobRegisterExtras): JobInfo;
   holiday(
     input: string | HolidayInput,
@@ -137,43 +144,23 @@ export class CalendarScheduler {
     extras?: JobRegisterExtras,
   ): JobInfo {
     return this.register(
-      resolveHolidayJob(typeof input === 'string' ? { time: input } : input, this.timezone),
+      resolveHolidayJob(typeof input === 'string' ? { cron: input } : input, this.timezone),
       handler,
       key,
       extras,
     );
   }
 
-  freeDay(time: string, handler: JobHandler, key?: string, extras?: JobRegisterExtras): JobInfo;
-  freeDay(time: TimeInput, handler: JobHandler, key?: string, extras?: JobRegisterExtras): JobInfo;
-  freeDay(
-    time: string | TimeInput,
-    handler: JobHandler,
-    key?: string,
-    extras?: JobRegisterExtras,
-  ): JobInfo {
-    return this.register(
-      resolveFreeDayJob(typeof time === 'string' ? { time } : time, this.timezone),
-      handler,
-      key,
-      extras,
-    );
+  freeDay(cron: string, handler: JobHandler, key?: string, extras?: JobRegisterExtras): JobInfo {
+    return this.register(resolveFreeDayJob(cron, this.timezone), handler, key, extras);
   }
 
-  workday(time: string, handler: JobHandler, key?: string, extras?: JobRegisterExtras): JobInfo;
-  workday(time: TimeInput, handler: JobHandler, key?: string, extras?: JobRegisterExtras): JobInfo;
-  workday(
-    time: string | TimeInput,
-    handler: JobHandler,
-    key?: string,
-    extras?: JobRegisterExtras,
-  ): JobInfo {
-    return this.register(
-      resolveWorkdayJob(typeof time === 'string' ? { time } : time, this.timezone),
-      handler,
-      key,
-      extras,
-    );
+  workday(cron: string, handler: JobHandler, key?: string, extras?: JobRegisterExtras): JobInfo {
+    return this.register(resolveWorkdayJob(cron, this.timezone), handler, key, extras);
+  }
+
+  scatter(input: ScatterInput, handler: JobHandler, key?: string, extras?: JobRegisterExtras): JobInfo {
+    return this.register(resolveScatterJob(input, this.timezone), handler, key, extras);
   }
 
   cancel(id: string): boolean {
@@ -223,7 +210,15 @@ export class CalendarScheduler {
     }
 
     const id = extras?.id ?? createJobId();
-    const nextRunAt = getNextRun(resolved, new Date());
+    const scatterState = getScatterState(extras?.payload);
+    const payload =
+      resolved.kind === 'scatter'
+        ? mergeScatterPayload(extras?.payload, scatterState)
+        : extras?.payload;
+    const nextRunAt = getNextRun(resolved, new Date(), {
+      jobId: id,
+      scatterState: resolved.kind === 'scatter' ? scatterState : undefined,
+    });
     const ephemeral = !this.store || !handlerKey;
 
     const job: InternalJob = {
@@ -231,7 +226,7 @@ export class CalendarScheduler {
       resolved,
       handler: handlerKey ? undefined : handler,
       handlerKey,
-      payload: extras?.payload,
+      payload,
       nextRunAt,
       cancelled: false,
       ephemeral,
@@ -292,7 +287,18 @@ export class CalendarScheduler {
 
     try {
       const scheduledAt = job.nextRunAt ?? new Date();
-      const ctx = buildJobContext(job.id, job.resolved.kind, scheduledAt, job.resolved.timezone);
+      const scatterState = getScatterState(job.payload);
+      const scatterMeta =
+        job.resolved.kind === 'scatter'
+          ? getScatterMeta(scheduledAt, job.resolved, scatterState)
+          : undefined;
+      const ctx = buildJobContext(
+        job.id,
+        job.resolved.kind,
+        scheduledAt,
+        job.resolved.timezone,
+        scatterMeta,
+      );
       const handler = this.resolveHandler(job);
 
       if (!handler) {
@@ -319,7 +325,16 @@ export class CalendarScheduler {
         return;
       }
 
-      job.nextRunAt = getNextRun(job.resolved, new Date());
+      if (job.resolved.kind === 'scatter') {
+        const newState = advanceScatterState(scheduledAt, job.resolved.timezone, scatterState);
+        job.payload = mergeScatterPayload(job.payload, newState);
+        job.nextRunAt = getNextRun(job.resolved, new Date(), {
+          jobId: job.id,
+          scatterState: newState,
+        });
+      } else {
+        job.nextRunAt = getNextRun(job.resolved, new Date());
+      }
       if (job.nextRunAt == null) {
         job.cancelled = true;
         this.jobs.delete(job.id);
@@ -357,7 +372,11 @@ export class CalendarScheduler {
       if (job.cancelled) {
         continue;
       }
-      job.nextRunAt = getNextRun(job.resolved, new Date());
+      job.nextRunAt = getNextRun(job.resolved, new Date(), {
+        jobId: job.id,
+        scatterState:
+          job.resolved.kind === 'scatter' ? getScatterState(job.payload) : undefined,
+      });
       if (job.nextRunAt == null) {
         job.cancelled = true;
         this.timer.remove(job.id);
