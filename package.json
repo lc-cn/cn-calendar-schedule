@@ -1,6 +1,6 @@
 {
   "name": "cn-calendar-schedule",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "description": "Chinese calendar semantic scheduler — zero-deps solar, lunar, statutory holidays, rest days & makeup workdays",
   "type": "module",
   "main": "./dist/index.cjs",

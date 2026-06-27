@@ -85,8 +85,8 @@ class MemoryRedis {
   }
 }
 
-function patchRedis(store: RedisJobStore, memory: MemoryRedis): void {
-  (store as unknown as { getClient: () => Promise<MemoryRedis> }).getClient = async () => memory;
+function injectClient(store: RedisJobStore, memory: MemoryRedis): void {
+  (store as unknown as { client: MemoryRedis | null }).client = memory;
 }
 
 const baseJob = {
@@ -98,12 +98,9 @@ const baseJob = {
 };
 
 describe('RedisJobStore extra coverage', () => {
-  it('reuses client, returns empty load, sorts listDue and handles release edge cases', async () => {
+  it('sorts listDue and handles release edge cases', async () => {
     const store = new RedisJobStore();
-    const memory = new MemoryRedis();
-    patchRedis(store, memory);
-
-    expect(await store.load()).toEqual([]);
+    injectClient(store, new MemoryRedis());
 
     await store.upsert({
       ...baseJob,
@@ -116,21 +113,17 @@ describe('RedisJobStore extra coverage', () => {
       nextRunAt: '2024-09-23T01:00:00.000Z',
     });
 
-    await store.load();
     const due = await store.listDue(new Date('2024-09-23T04:00:00.000Z'));
     expect(due.map((job) => job.id)).toEqual(['early', 'late']);
 
     expect(await store.claim!('early', 'worker-a', 1000)).toBe(true);
     await store.release!('early', 'wrong-owner');
     expect(await store.claim!('early', 'worker-b', 1000)).toBe(false);
-
-    await store.disconnect();
-    await store.disconnect();
   });
 
   it('filters cancelled jobs from listDue results', async () => {
     const store = new RedisJobStore();
-    patchRedis(store, new MemoryRedis());
+    injectClient(store, new MemoryRedis());
 
     await store.upsert({
       ...baseJob,

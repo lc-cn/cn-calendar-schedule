@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { RedisJobStore } from '../src/store/redis-store.js';
+import { createRedisStore, RedisJobStore } from '../src/store/redis-store.js';
 
 class MemoryRedis {
   private strings = new Map<string, string>();
@@ -84,7 +84,15 @@ function patchStore(store: RedisJobStore, memory: MemoryRedis): void {
   (store as unknown as { getClient: () => Promise<MemoryRedis> }).getClient = async () => memory;
 }
 
+function injectClient(store: RedisJobStore, memory: MemoryRedis): void {
+  (store as unknown as { client: MemoryRedis | null }).client = memory;
+}
+
 describe('RedisJobStore with in-memory client', () => {
+  it('creates store via factory with custom options', () => {
+    expect(createRedisStore({ keyPrefix: 'custom:' })).toBeInstanceOf(RedisJobStore);
+  });
+
   it('upserts, loads, lists due, removes and manages claims', async () => {
     const store = new RedisJobStore();
     const memory = new MemoryRedis();
@@ -116,6 +124,52 @@ describe('RedisJobStore with in-memory client', () => {
 
     await store.remove('redis-1');
     expect(await store.load()).toHaveLength(0);
+  });
+
+  it('reuses cached client and disconnect clears connection', async () => {
+    const store = new RedisJobStore({ url: 'redis://custom:6379', keyPrefix: 'app:' });
+    const memory = new MemoryRedis();
+    injectClient(store, memory);
+
+    await store.load();
+    await store.load();
+
     await store.disconnect();
+    await store.disconnect();
+  });
+
+  it('skips missing hash values and handles null nextRunAt upsert', async () => {
+    class BrokenRedis extends MemoryRedis {
+      async hkeys(): Promise<string[]> {
+        return ['ghost'];
+      }
+      async hmget(): Promise<(string | null)[]> {
+        return [null];
+      }
+    }
+
+    const store = new RedisJobStore();
+    injectClient(store, new BrokenRedis());
+    expect(await store.load()).toEqual([]);
+    expect(await store.listDue(new Date())).toEqual([]);
+
+    injectClient(store, new MemoryRedis());
+    await store.upsert({
+      schemaVersion: 2,
+      id: 'no-run',
+      resolved: { kind: 'solar', cron: '0 0 9 * * *', timezone: 'Asia/Shanghai' },
+      handlerKey: 'daily',
+      nextRunAt: null,
+      cancelled: false,
+      updatedAt: '2024-09-23T00:00:00.000Z',
+    });
+    expect(await store.listDue(new Date('2024-09-23T04:00:00.000Z'))).toHaveLength(0);
+  });
+
+  it('claim returns false when lock already held', async () => {
+    const store = new RedisJobStore();
+    injectClient(store, new MemoryRedis());
+    expect(await store.claim!('job-1', 'a', 1000)).toBe(true);
+    expect(await store.claim!('job-1', 'b', 1000)).toBe(false);
   });
 });
