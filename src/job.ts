@@ -11,6 +11,10 @@ export interface InternalJob {
   nextRunAt: Date | null;
   cancelled: boolean;
   ephemeral: boolean;
+  paused: boolean;
+  runCount: number;
+  maxRuns?: number;
+  expiresAt?: Date | null;
 }
 
 export function createJobId(): string {

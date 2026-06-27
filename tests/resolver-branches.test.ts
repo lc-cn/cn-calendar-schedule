@@ -41,6 +41,9 @@ describe('resolver branch coverage', () => {
 
   it('isLunarDue returns false when lunar date matches but clock does not', () => {
     const job = resolveLunarJob('0 0 9 1 1 *', TZ);
+    if (job.kind !== 'lunar') {
+      throw new Error('expected lunar job');
+    }
     expect(isLunarDue(at('2025-01-29T10:00:00+08:00'), job.cron, TZ)).toBe(false);
   });
 

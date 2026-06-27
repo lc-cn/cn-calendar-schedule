@@ -1,4 +1,11 @@
+import type { QuietHoursWindow } from '../types.js';
+
 const TIME_RE = /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/;
+
+export interface ScatterSlotOptions {
+  quietHours?: QuietHoursWindow[];
+  minGapMinutes?: number;
+}
 
 export function parseTimeOfDay(value: string): number {
   const match = TIME_RE.exec(value.trim());
@@ -35,28 +42,96 @@ function mulberry32(seed: number): () => number {
   };
 }
 
+function isSecInQuietHours(sec: number, startSec: number, endSec: number): boolean {
+  if (startSec <= endSec) {
+    return sec >= startSec && sec <= endSec;
+  }
+  return sec >= startSec || sec <= endSec;
+}
+
+export function buildEligiblePool(
+  windowStartSec: number,
+  windowEndSec: number,
+  quietHours?: QuietHoursWindow[],
+): number[] {
+  const quietRanges = (quietHours ?? []).map((q) => ({
+    start: parseTimeOfDay(q.start),
+    end: parseTimeOfDay(q.end),
+  }));
+
+  const pool: number[] = [];
+  for (let sec = windowStartSec; sec <= windowEndSec; sec++) {
+    const blocked = quietRanges.some((range) => isSecInQuietHours(sec, range.start, range.end));
+    if (!blocked) {
+      pool.push(sec);
+    }
+  }
+  return pool;
+}
+
+function satisfiesMinGap(selected: number[], candidate: number, minGapSec: number): boolean {
+  if (minGapSec <= 0) {
+    return true;
+  }
+  for (const slot of selected) {
+    if (Math.abs(candidate - slot) < minGapSec) {
+      return false;
+    }
+  }
+  return true;
+}
+
 export function generateDailySlots(
   jobId: string,
   dateKey: string,
   windowStartSec: number,
   windowEndSec: number,
   count: number,
+  options: ScatterSlotOptions = {},
 ): number[] {
-  const span = windowEndSec - windowStartSec + 1;
-  if (count > span) {
+  const pool = buildEligiblePool(windowStartSec, windowEndSec, options.quietHours);
+  if (count > pool.length) {
     throw new Error('count exceeds window capacity');
   }
 
+  const minGapSec = (options.minGapMinutes ?? 0) * 60;
   const rand = mulberry32(seedFrom(jobId, dateKey));
-  const pool: number[] = [];
-  for (let sec = windowStartSec; sec <= windowEndSec; sec++) {
-    pool.push(sec);
+  const shuffled = [...pool];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
   }
 
-  for (let i = 0; i < count; i++) {
-    const j = i + Math.floor(rand() * (pool.length - i));
-    [pool[i], pool[j]] = [pool[j], pool[i]];
+  const selected: number[] = [];
+  for (const candidate of shuffled) {
+    if (!satisfiesMinGap(selected, candidate, minGapSec)) {
+      continue;
+    }
+    selected.push(candidate);
+    if (selected.length >= count) {
+      break;
+    }
   }
 
-  return pool.slice(0, count).sort((a, b) => a - b);
+  if (selected.length < count) {
+    throw new Error('count exceeds window capacity with minGap/quietHours');
+  }
+
+  return selected.sort((a, b) => a - b);
+}
+
+export function canFitScatterCount(
+  jobId: string,
+  dateKey: string,
+  windowStartSec: number,
+  windowEndSec: number,
+  count: number,
+  options: ScatterSlotOptions = {},
+): boolean {
+  try {
+    generateDailySlots(jobId, dateKey, windowStartSec, windowEndSec, count, options);
+    return true;
+  } catch {
+    return false;
+  }
 }

@@ -11,6 +11,8 @@ function job(id: string, at: Date, cancelled = false): InternalJob {
     nextRunAt: at,
     cancelled,
     ephemeral: true,
+    paused: false,
+    runCount: 0,
   };
 }
 

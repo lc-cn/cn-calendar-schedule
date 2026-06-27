@@ -1,5 +1,6 @@
 import type { JobStore, LocalJsonStoreOptions, StoredJob } from './types.js';
 import { DEFAULT_JOBS_PATH } from './types.js';
+import { migrateStoredJob } from './migrate.js';
 
 interface JobsFilePayload {
   jobs: StoredJob[];
@@ -19,7 +20,7 @@ export class LocalJsonJobStore implements JobStore {
     try {
       const raw = await fs.readFile(this.path, 'utf8');
       const parsed = JSON.parse(raw) as JobsFilePayload;
-      this.jobs = parsed.jobs ?? [];
+      this.jobs = (parsed.jobs ?? []).map((job) => migrateStoredJob(job));
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
         throw err;

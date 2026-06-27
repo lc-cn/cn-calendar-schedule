@@ -1,6 +1,7 @@
 import type { ResolvedJob } from '../types.js';
 
 export interface StoredJob {
+  schemaVersion?: number;
   id: string;
   resolved: ResolvedJob;
   handlerKey: string;
@@ -8,6 +9,10 @@ export interface StoredJob {
   nextRunAt: string | null;
   cancelled: boolean;
   updatedAt: string;
+  paused?: boolean;
+  runCount?: number;
+  maxRuns?: number;
+  expiresAt?: string | null;
 }
 
 export interface JobStore {

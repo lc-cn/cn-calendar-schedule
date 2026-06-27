@@ -21,7 +21,9 @@ resolvers/*                ← 各 kind 的 next-run 算法
 parsers/cron.ts            ← 6 段 cron（秒 分 时 日 月 周）
 data/holiday-registry.ts   ← 可变节假日 registry + updateData
 data/lunar-table.ts        ← 1900–2100 农历年表
-store/*                    ← JobStore 抽象 + LocalJsonJobStore
+store/*                    ← JobStore 抽象 + LocalJson（默认）/ SQLite / Redis（optional peer）
+calendar-helpers.ts        ← 节前/节后/连休首尾等，供 handler 与 scatter `on` 复用
+planning/simulate-runs.ts  ← 纯计算预览 next runs（CLI next-runs）
 ```
 
 ## 语义边界（勿混淆）
@@ -33,3 +35,26 @@ store/*                    ← JobStore 抽象 + LocalJsonJobStore
 | `workday` | 工作日 = 非 freeDay（含补班） |
 
 `FestivalName` 使用中文：`'元旦'|'春节'|…|'国庆节'`。
+
+## scatter v2（`ScatterInput`）
+
+- `minGapMinutes` / `quietHours`：注册时严格校验，排不满 `count` → `InvalidScheduleError`
+- `on` 扩展：`holidayEve`（节前 N 天）、`afterHoliday`（节后 N 天）
+- `misfire`：`fire`（默认）| `skip` | `coalesce`（同日多过期 slot 合并 1 次，scatterIndex = 最后过期 slot）
+- 公开：`listScatterSlots`；ctx 可选 `scatterSlotsToday` / `scatterRemaining`
+
+## Store 选型
+
+| Store | 场景 | 依赖 |
+|-------|------|------|
+| LocalJson | 默认、快速开始 | 无 |
+| SQLite | 单节点生产 | Node.js 22.5+ 内置 `node:sqlite` |
+| Redis | 多 worker + claim | optional `ioredis` |
+
+重依赖均 dynamic import；未安装 peer 时抛明确安装指引。`StoredJob.schemaVersion` 当前为 2，load 时自动 migrate。
+
+## 调度器运维
+
+- `list()` / `get()` / `pause()` / `resume()`
+- `maxRuns` / `expiresAt` / `handlerTimeoutMs`
+- 分布式：`workerId` + store `claim`/`release`（Redis）

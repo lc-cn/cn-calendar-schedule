@@ -4,9 +4,14 @@ import {
   DEFAULT_TIMEZONE,
   type HolidayInput,
   type ResolvedJob,
+  type ScatterDayFilter,
   type ScatterInput,
 } from './types.js';
-import { parseTimeOfDay } from './utils/scatter-slots.js';
+import { isScatterDayFilter } from './resolvers/scatter.js';
+import { canFitScatterCount, parseTimeOfDay } from './utils/scatter-slots.js';
+
+const SCATTER_VALIDATION_JOB_ID = '__scatter_validate__';
+const SCATTER_VALIDATION_DATE_KEY = '2024-06-15';
 
 function validateCron(cron: string): void {
   try {
@@ -47,6 +52,31 @@ function validateCalendarScheduleCron(cron: string): void {
     throw new InvalidScheduleError(
       err instanceof Error ? err.message : 'Invalid calendar cron expression',
     );
+  }
+}
+
+function validateScatterDayFilter(on: ScatterDayFilter): void {
+  if (!isScatterDayFilter(on)) {
+    throw new InvalidScheduleError('Invalid scatter day filter');
+  }
+  if (typeof on === 'object' && on.kind === 'afterHoliday' && !on.festivals) {
+    throw new InvalidScheduleError('afterHoliday filter requires festivals');
+  }
+}
+
+function validateQuietHours(quietHours: ScatterInput['quietHours']): void {
+  if (!quietHours) {
+    return;
+  }
+  for (const window of quietHours) {
+    try {
+      parseTimeOfDay(window.start);
+      parseTimeOfDay(window.end);
+    } catch (err) {
+      throw new InvalidScheduleError(
+        err instanceof Error ? err.message : 'Invalid scatter quiet hours',
+      );
+    }
   }
 }
 
@@ -122,17 +152,37 @@ export function resolveScatterJob(
     throw new InvalidScheduleError('Scatter count exceeds window capacity');
   }
 
-  if (typeof input.on === 'object' && input.on.kind !== 'holiday') {
-    throw new InvalidScheduleError('Invalid scatter day filter');
+  validateScatterDayFilter(input.on);
+  validateQuietHours(input.quietHours);
+
+  if (input.minGapMinutes != null) {
+    if (!Number.isInteger(input.minGapMinutes) || input.minGapMinutes < 0) {
+      throw new InvalidScheduleError('Scatter minGapMinutes must be a non-negative integer');
+    }
   }
 
+  if (input.misfire != null && input.misfire !== 'fire' && input.misfire !== 'skip' && input.misfire !== 'coalesce') {
+    throw new InvalidScheduleError('Invalid scatter misfire policy');
+  }
+
+  const slotOptions = {
+    quietHours: input.quietHours,
+    minGapMinutes: input.minGapMinutes ?? 0,
+  };
+
   if (
-    input.on !== 'all' &&
-    input.on !== 'workday' &&
-    input.on !== 'freeDay' &&
-    (typeof input.on !== 'object' || input.on.kind !== 'holiday')
+    !canFitScatterCount(
+      SCATTER_VALIDATION_JOB_ID,
+      SCATTER_VALIDATION_DATE_KEY,
+      windowStartSec,
+      windowEndSec,
+      input.count,
+      slotOptions,
+    )
   ) {
-    throw new InvalidScheduleError('Invalid scatter day filter');
+    throw new InvalidScheduleError(
+      'Scatter count exceeds window capacity with minGap/quietHours',
+    );
   }
 
   return {
@@ -142,6 +192,9 @@ export function resolveScatterJob(
     windowEndSec,
     count: input.count,
     on: input.on,
+    minGapMinutes: input.minGapMinutes ?? 0,
+    quietHours: input.quietHours ?? [],
+    misfire: input.misfire ?? 'fire',
     timezone,
   };
 }

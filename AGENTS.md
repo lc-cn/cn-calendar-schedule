@@ -29,7 +29,12 @@
 | `pnpm run sync-holiday -- 2027` | 从 holiday-cn 同步单年 bundled JSON（维护者） |
 | `pnpm run example:basic` | 运行 [examples/basic.mjs](../examples/basic.mjs) |
 | `pnpm run example:persist` | 运行 [examples/persist.mjs](../examples/persist.mjs) |
+| `pnpm run example:sqlite-persist` | 运行 [examples/sqlite-persist.mjs](../examples/sqlite-persist.mjs)（Node 22.5+） |
 | `pnpm run example:scatter` | 运行 [examples/scatter.mjs](../examples/scatter.mjs) |
+| `pnpm run example:scatter-advanced` | 运行 [examples/scatter-advanced.mjs](../examples/scatter-advanced.mjs) |
+| `pnpm run example:holiday-eve` | 运行 [examples/holiday-eve.mjs](../examples/holiday-eve.mjs) |
+| `pnpm run example:scheduler-ops` | 运行 [examples/scheduler-ops.mjs](../examples/scheduler-ops.mjs) |
+| `pnpm run next-runs` | 运行 [scripts/next-runs.mjs](../scripts/next-runs.mjs) |
 
 ## CI/CD
 
@@ -64,7 +69,7 @@ src/
 └── timer/timer-wheel.ts  # 单定时器 min-heap 调度
 
 tests/                    # Vitest；临时文件在 tests/.tmp/
-examples/                 # 可运行示例（basic / persist / scatter）
+examples/                 # 可运行示例（basic / persist / sqlite / scatter / ops）
 scripts/sync-holiday.mjs  # 维护者同步 bundled JSON
 ```
 

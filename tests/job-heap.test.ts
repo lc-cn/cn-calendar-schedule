@@ -8,6 +8,8 @@ function job(id: string, nextRunAt: Date | null): InternalJob {
     nextRunAt,
     cancelled: false,
     ephemeral: true,
+    paused: false,
+    runCount: 0,
   };
 }
 

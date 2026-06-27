@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as dispatch from '../src/dispatch.js';
 import { CalendarScheduler } from '../src/scheduler.js';
 import { createLocalJsonStore } from '../src/store/local-json-store.js';
+import type { JobStore, StoredJob } from '../src/store/types.js';
 
 const TEST_TMP_ROOT = join(process.cwd(), 'tests', '.tmp');
 
@@ -240,6 +241,79 @@ describe('CalendarScheduler branch coverage', () => {
     await scheduler.ready;
     await vi.advanceTimersByTimeAsync(500);
     await Promise.resolve();
+    scheduler.stop();
+  });
+
+  it('reconcile skips paused jobs and does nothing after stop', async () => {
+    tempDir = join(TEST_TMP_ROOT, `reconcile-paused-${Date.now()}`);
+    await mkdir(tempDir, { recursive: true });
+    vi.setSystemTime(new Date('2025-06-27T09:05:00+08:00'));
+
+    const handler = vi.fn();
+    const store = createLocalJsonStore({ path: join(tempDir, 'jobs.json') });
+    await store.upsert({
+      id: 'paused-job',
+      handlerKey: 'daily',
+      resolved: { kind: 'solar', cron: '0 0 9 * * *', timezone: 'Asia/Shanghai' },
+      nextRunAt: '2025-06-27T01:00:00.000Z',
+      cancelled: false,
+      updatedAt: new Date().toISOString(),
+    });
+
+    const scheduler = new CalendarScheduler({
+      timezone: 'Asia/Shanghai',
+      store,
+      handlers: { daily: handler },
+      reconcileIntervalMs: 100,
+    });
+    await scheduler.ready;
+    scheduler.pause('paused-job');
+
+    await vi.advanceTimersByTimeAsync(500);
+    await Promise.resolve();
+    expect(handler).not.toHaveBeenCalled();
+
+    scheduler.stop();
+    await vi.advanceTimersByTimeAsync(500);
+    await Promise.resolve();
+  });
+
+  it('reconcile reschedules when in-memory nextRunAt is in the future', async () => {
+    vi.setSystemTime(new Date('2025-06-27T09:05:00+08:00'));
+
+    const handler = vi.fn();
+    const dueRecord: StoredJob = {
+      schemaVersion: 2,
+      id: 'future-job',
+      handlerKey: 'daily',
+      resolved: { kind: 'solar', cron: '0 0 9 * * *', timezone: 'Asia/Shanghai' },
+      nextRunAt: '2025-06-27T01:00:00.000Z',
+      cancelled: false,
+      updatedAt: new Date().toISOString(),
+    };
+    const futureRecord: StoredJob = {
+      ...dueRecord,
+      nextRunAt: '2025-06-27T02:00:00.000Z',
+    };
+
+    const store: JobStore = {
+      load: async () => [futureRecord],
+      upsert: async () => {},
+      remove: async () => {},
+      listDue: async () => [dueRecord],
+    };
+
+    const scheduler = new CalendarScheduler({
+      timezone: 'Asia/Shanghai',
+      store,
+      handlers: { daily: handler },
+      reconcileIntervalMs: 100,
+    });
+    await scheduler.ready;
+
+    await vi.advanceTimersByTimeAsync(300);
+    await Promise.resolve();
+    expect(handler).not.toHaveBeenCalled();
     scheduler.stop();
   });
 });

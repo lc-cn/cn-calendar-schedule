@@ -9,10 +9,13 @@ import {
   getScatterNextRun,
   isScatterDayFilter,
   isScatterDue,
+  listScatterSlots,
+  listScatterSlotsForDay,
 } from '../src/resolvers/scatter.js';
 import { CalendarScheduler } from '../src/scheduler.js';
 import { createLocalJsonStore } from '../src/store/local-json-store.js';
 import { InvalidScheduleError } from '../src/types.js';
+import type { ResolvedJob } from '../src/types.js';
 import { generateDailySlots, parseTimeOfDay, seedFrom } from '../src/utils/scatter-slots.js';
 import {
   advanceScatterState,
@@ -24,6 +27,8 @@ import { formatDateKey } from '../src/utils/timezone.js';
 const TZ = 'Asia/Shanghai';
 const TEST_TMP_ROOT = join(process.cwd(), 'tests', '.tmp');
 
+type ResolvedScatterJob = Extract<ResolvedJob, { kind: 'scatter' }>;
+
 async function createTestDir(name: string): Promise<string> {
   const dir = join(TEST_TMP_ROOT, `${name}-${Date.now()}-${Math.random().toString(36).slice(2)}`);
   await mkdir(dir, { recursive: true });
@@ -34,11 +39,11 @@ function at(iso: string): Date {
   return new Date(iso);
 }
 
-function scatterJob(on: 'all' | 'workday' | 'freeDay' = 'workday') {
+function scatterJob(on: 'all' | 'workday' | 'freeDay' = 'workday'): ResolvedScatterJob {
   return resolveScatterJob(
     { window: { start: '09:00', end: '22:00' }, count: 3, on },
     TZ,
-  );
+  ) as ResolvedScatterJob;
 }
 
 describe('scatter-slots', () => {
@@ -264,6 +269,7 @@ describe('scatter resolver', () => {
     expect(getScatterMeta(scheduledAt, job, { dateKey: '2024-09-23', firedCount: 2 })).toEqual({
       scatterIndex: 1,
       scatterCount: 3,
+      scatterRemaining: 3,
     });
   });
 
@@ -272,8 +278,18 @@ describe('scatter resolver', () => {
     expect(isScatterDayFilter('workday')).toBe(true);
     expect(isScatterDayFilter('freeDay')).toBe(true);
     expect(isScatterDayFilter({ kind: 'holiday', festivals: ['国庆节'] })).toBe(true);
+    expect(isScatterDayFilter({ kind: 'holidayEve', festivals: ['国庆节'] })).toBe(true);
+    expect(isScatterDayFilter({ kind: 'afterHoliday', festivals: ['国庆节'], daysAfter: 1 })).toBe(true);
     expect(isScatterDayFilter('invalid' as 'all')).toBe(false);
     expect(isScatterDayFilter({ kind: 'other' } as { kind: 'holiday' })).toBe(false);
+  });
+
+  it('listScatterSlots helpers expose planned times', () => {
+    const allToday = listScatterSlotsForDay(job, jobId, '2024-09-23');
+    expect(allToday).toHaveLength(3);
+    const remaining = listScatterSlots(job, jobId, '2024-09-23', { dateKey: '2024-09-23', firedCount: 1 });
+    expect(remaining).toHaveLength(2);
+    expect(listScatterSlotsForDay(job, jobId, '2024-09-21')).toEqual([]);
   });
 });
 

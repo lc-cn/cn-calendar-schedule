@@ -26,6 +26,10 @@ export function mergeScatterPayload(
   return { ...base, scatter: state };
 }
 
+export function setScatterState(dateKey: string, firedCount: number): ScatterRunState {
+  return { dateKey, firedCount };
+}
+
 export function advanceScatterState(
   firedAt: Date,
   timezone: string,

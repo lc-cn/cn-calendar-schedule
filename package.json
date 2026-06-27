@@ -30,6 +30,11 @@
     "example:basic": "pnpm run build && node examples/basic.mjs",
     "example:persist": "pnpm run build && node examples/persist.mjs",
     "example:scatter": "pnpm run build && node examples/scatter.mjs",
+    "example:scatter-advanced": "pnpm run build && node examples/scatter-advanced.mjs",
+    "example:sqlite-persist": "pnpm run build && node examples/sqlite-persist.mjs",
+    "example:holiday-eve": "pnpm run build && node examples/holiday-eve.mjs",
+    "example:scheduler-ops": "pnpm run build && node examples/scheduler-ops.mjs",
+    "next-runs": "pnpm run build && node scripts/next-runs.mjs",
     "prepublishOnly": "pnpm run build && pnpm run test:coverage"
   },
   "keywords": [

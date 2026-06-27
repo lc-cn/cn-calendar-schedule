@@ -1,3 +1,4 @@
+import { hostname } from 'node:os';
 import { buildJobContext } from './context.js';
 import { onHolidayDataUpdate } from './data/holiday-registry.js';
 import { getNextRun } from './dispatch.js';
@@ -15,9 +16,8 @@ import {
   resolveSolarJob,
   resolveWorkdayJob,
 } from './resolve-job.js';
-import { getScatterMeta } from './resolvers/scatter.js';
+import { planScatterExecution } from './utils/scatter-misfire.js';
 import {
-  advanceScatterState,
   getScatterState,
   mergeScatterPayload,
 } from './utils/scatter-state.js';
@@ -27,6 +27,7 @@ import {
   type RegisteredHandler,
 } from './store/handler-registry.js';
 import { createLocalJsonStore } from './store/local-json-store.js';
+import { CURRENT_SCHEMA_VERSION } from './store/migrate.js';
 import type { JobStore, StoredJob } from './store/types.js';
 import { TimerWheel } from './timer/timer-wheel.js';
 import type {
@@ -34,13 +35,45 @@ import type {
   JobHandler,
   JobInfo,
   JobRegisterExtras,
+  JobSnapshot,
   ResolvedJob,
   ScatterInput,
   SchedulerOptions,
 } from './types.js';
-import { DEFAULT_TIMEZONE } from './types.js';
+import { DEFAULT_MISFIRE_GRACE_MS, DEFAULT_TIMEZONE } from './types.js';
 
 const DEFAULT_RECONCILE_INTERVAL_MS = 1_000;
+const DEFAULT_CLAIM_TTL_MS = 60_000;
+
+function defaultWorkerId(): string {
+  return `${hostname()}-${process.pid}`;
+}
+
+function parseExpiresAt(value: Date | string | undefined): Date | null {
+  if (value == null) {
+    return null;
+  }
+  if (value instanceof Date) {
+    return value;
+  }
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function toJobSnapshot(job: InternalJob): JobSnapshot {
+  return {
+    id: job.id,
+    kind: job.resolved.kind,
+    nextRunAt: job.nextRunAt,
+    paused: job.paused,
+    runCount: job.runCount,
+    maxRuns: job.maxRuns,
+    expiresAt: job.expiresAt ?? null,
+    handlerKey: job.handlerKey,
+    payload: job.payload,
+    cancelled: job.cancelled,
+  };
+}
 
 export class CalendarScheduler {
   private readonly timezone: string;
@@ -48,6 +81,9 @@ export class CalendarScheduler {
   private readonly store?: JobStore;
   readonly handlers: HandlerRegistry;
   private readonly reconcileIntervalMs: number;
+  private readonly handlerTimeoutMs?: number;
+  private readonly misfireGraceMs: number;
+  private readonly workerId: string;
   private readonly jobs = new Map<string, InternalJob>();
   private readonly timer: TimerWheel;
   private running = true;
@@ -63,6 +99,9 @@ export class CalendarScheduler {
     this.onError = options.onError;
     this.handlers = createHandlerRegistry(options.handlers);
     this.reconcileIntervalMs = options.reconcileIntervalMs ?? DEFAULT_RECONCILE_INTERVAL_MS;
+    this.handlerTimeoutMs = options.handlerTimeoutMs;
+    this.misfireGraceMs = options.misfireGraceMs ?? DEFAULT_MISFIRE_GRACE_MS;
+    this.workerId = options.workerId ?? defaultWorkerId();
 
     if (options.store) {
       this.store = options.store;
@@ -94,6 +133,49 @@ export class CalendarScheduler {
     return this;
   }
 
+  list(): JobSnapshot[] {
+    return [...this.jobs.values()].map(toJobSnapshot);
+  }
+
+  get(id: string): JobSnapshot | undefined {
+    const job = this.jobs.get(id);
+    return job ? toJobSnapshot(job) : undefined;
+  }
+
+  pause(id: string): boolean {
+    const job = this.jobs.get(id);
+    if (!job || job.cancelled || job.paused) {
+      return false;
+    }
+    job.paused = true;
+    this.timer.remove(id);
+    if (this.store && !job.ephemeral) {
+      void this.persistJob(job);
+    }
+    return true;
+  }
+
+  resume(id: string): boolean {
+    const job = this.jobs.get(id);
+    if (!job || job.cancelled || !job.paused) {
+      return false;
+    }
+    job.paused = false;
+    job.nextRunAt = getNextRun(job.resolved, new Date(), {
+      jobId: job.id,
+      scatterState:
+        job.resolved.kind === 'scatter' ? getScatterState(job.payload) : undefined,
+    });
+    if (job.nextRunAt == null) {
+      return this.cancel(id);
+    }
+    this.timer.add(job);
+    if (this.store && !job.ephemeral) {
+      void this.persistJob(job);
+    }
+    return true;
+  }
+
   async start(): Promise<void> {
     if (this.started) {
       return;
@@ -115,7 +197,9 @@ export class CalendarScheduler {
         }
         const job = this.fromStoredJob(record);
         this.jobs.set(job.id, job);
-        this.timer.add(job);
+        if (!job.paused) {
+          this.timer.add(job);
+        }
       }
     }
 
@@ -230,6 +314,10 @@ export class CalendarScheduler {
       nextRunAt,
       cancelled: false,
       ephemeral,
+      paused: false,
+      runCount: 0,
+      maxRuns: extras?.maxRuns,
+      expiresAt: parseExpiresAt(extras?.expiresAt),
     };
 
     this.jobs.set(id, job);
@@ -251,11 +339,16 @@ export class CalendarScheduler {
       nextRunAt: record.nextRunAt ? new Date(record.nextRunAt) : null,
       cancelled: record.cancelled,
       ephemeral: false,
+      paused: record.paused ?? false,
+      runCount: record.runCount ?? 0,
+      maxRuns: record.maxRuns,
+      expiresAt: record.expiresAt ? new Date(record.expiresAt) : null,
     };
   }
 
   private toStoredJob(job: InternalJob): StoredJob {
     return {
+      schemaVersion: CURRENT_SCHEMA_VERSION,
       id: job.id,
       resolved: job.resolved,
       handlerKey: job.handlerKey ?? '',
@@ -263,6 +356,10 @@ export class CalendarScheduler {
       nextRunAt: job.nextRunAt?.toISOString() ?? null,
       cancelled: job.cancelled,
       updatedAt: new Date().toISOString(),
+      paused: job.paused,
+      runCount: job.runCount,
+      maxRuns: job.maxRuns,
+      expiresAt: job.expiresAt?.toISOString() ?? null,
     };
   }
 
@@ -277,8 +374,65 @@ export class CalendarScheduler {
     }
   }
 
+  private jobExpired(job: InternalJob, now: Date): boolean {
+    return job.expiresAt != null && now.getTime() >= job.expiresAt.getTime();
+  }
+
+  private async tryClaim(job: InternalJob): Promise<boolean> {
+    if (!this.store?.claim) {
+      return true;
+    }
+    return this.store.claim(job.id, this.workerId, DEFAULT_CLAIM_TTL_MS);
+  }
+
+  private async releaseClaim(job: InternalJob): Promise<void> {
+    if (!this.store?.release) {
+      return;
+    }
+    try {
+      await this.store.release(job.id, this.workerId);
+    } catch {
+      // best-effort
+    }
+  }
+
+  private async runHandler(handler: JobHandler, ctx: ReturnType<typeof buildJobContext>): Promise<void> {
+    if (!this.handlerTimeoutMs) {
+      await handler(ctx);
+      return;
+    }
+
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        Promise.resolve(handler(ctx)),
+        new Promise<never>((_, reject) => {
+          timeoutId = setTimeout(
+            () => reject(new Error(`Handler timeout after ${this.handlerTimeoutMs}ms`)),
+            this.handlerTimeoutMs,
+          );
+        }),
+      ]);
+    } finally {
+      if (timeoutId != null) {
+        clearTimeout(timeoutId);
+      }
+    }
+  }
+
   private async executeJob(job: InternalJob): Promise<void> {
-    if (job.cancelled || !this.running || this.executing.has(job.id)) {
+    if (job.cancelled || !this.running || this.executing.has(job.id) || job.paused) {
+      return;
+    }
+
+    const now = new Date();
+    if (this.jobExpired(job, now)) {
+      this.cancel(job.id);
+      return;
+    }
+
+    const claimed = await this.tryClaim(job);
+    if (!claimed) {
       return;
     }
 
@@ -286,18 +440,64 @@ export class CalendarScheduler {
     this.timer.remove(job.id);
 
     try {
-      const scheduledAt = job.nextRunAt ?? new Date();
+      let scheduledAt = job.nextRunAt ?? now;
       const scatterState = getScatterState(job.payload);
-      const scatterMeta =
-        job.resolved.kind === 'scatter'
-          ? getScatterMeta(scheduledAt, job.resolved, scatterState)
-          : undefined;
+      let nextScatterState = scatterState;
+      let scatterCtx:
+        | {
+            scatterIndex: number;
+            scatterCount: number;
+            scatterRemaining?: number;
+            scatterSlotsToday?: Date[];
+          }
+        | undefined;
+
+      if (job.resolved.kind === 'scatter') {
+        const plan = planScatterExecution(
+          job.resolved,
+          job.id,
+          scatterState,
+          scheduledAt,
+          now,
+          this.misfireGraceMs,
+        );
+        scheduledAt = plan.scheduledAt;
+        nextScatterState = plan.nextState;
+        scatterCtx = {
+          scatterIndex: plan.scatterIndex,
+          scatterCount: plan.scatterCount,
+          scatterRemaining: plan.scatterRemaining,
+          scatterSlotsToday: plan.scatterSlotsToday,
+        };
+
+        if (!plan.shouldRunHandler) {
+          job.payload = mergeScatterPayload(job.payload, nextScatterState);
+          job.nextRunAt = getNextRun(job.resolved, new Date(), {
+            jobId: job.id,
+            scatterState: nextScatterState,
+          });
+          if (job.nextRunAt == null) {
+            job.cancelled = true;
+            this.jobs.delete(job.id);
+            if (this.store && !job.ephemeral) {
+              void this.store.remove(job.id);
+            }
+            return;
+          }
+          if (this.store && !job.ephemeral) {
+            await this.persistJob(job);
+          }
+          this.timer.update(job);
+          return;
+        }
+      }
+
       const ctx = buildJobContext(
         job.id,
         job.resolved.kind,
         scheduledAt,
         job.resolved.timezone,
-        scatterMeta,
+        scatterCtx,
       );
       const handler = this.resolveHandler(job);
 
@@ -310,7 +510,8 @@ export class CalendarScheduler {
         }
       } else {
         try {
-          await handler(ctx);
+          await this.runHandler(handler, ctx);
+          job.runCount++;
         } catch (err) {
           if (this.onError) {
             this.onError(
@@ -325,16 +526,21 @@ export class CalendarScheduler {
         return;
       }
 
+      if (job.maxRuns != null && job.runCount >= job.maxRuns) {
+        this.cancel(job.id);
+        return;
+      }
+
       if (job.resolved.kind === 'scatter') {
-        const newState = advanceScatterState(scheduledAt, job.resolved.timezone, scatterState);
-        job.payload = mergeScatterPayload(job.payload, newState);
+        job.payload = mergeScatterPayload(job.payload, nextScatterState);
         job.nextRunAt = getNextRun(job.resolved, new Date(), {
           jobId: job.id,
-          scatterState: newState,
+          scatterState: nextScatterState,
         });
       } else {
         job.nextRunAt = getNextRun(job.resolved, new Date());
       }
+
       if (job.nextRunAt == null) {
         job.cancelled = true;
         this.jobs.delete(job.id);
@@ -350,6 +556,7 @@ export class CalendarScheduler {
       this.timer.update(job);
     } finally {
       this.executing.delete(job.id);
+      await this.releaseClaim(job);
     }
   }
 
@@ -369,7 +576,7 @@ export class CalendarScheduler {
 
   private async recalculateAllJobs(): Promise<void> {
     for (const job of this.jobs.values()) {
-      if (job.cancelled) {
+      if (job.cancelled || job.paused) {
         continue;
       }
       job.nextRunAt = getNextRun(job.resolved, new Date(), {
@@ -410,7 +617,7 @@ export class CalendarScheduler {
         this.jobs.set(job.id, job);
       }
 
-      if (job.cancelled || job.nextRunAt == null) {
+      if (job.cancelled || job.nextRunAt == null || job.paused) {
         continue;
       }
 

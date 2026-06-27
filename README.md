@@ -69,9 +69,10 @@ schedule.workday(CALENDAR_CRON, (ctx) => {
 | 每个法定假日的**节日当天** 9 点 | `schedule.holiday('0 0 9 * * *', handler)` | calendar cron |
 | 仅国庆 / 春节等 + 连休每天 | `schedule.holiday({ cron, festivals, everyDayOfHoliday: true }, handler)` | `HolidayInput` |
 | 工作日窗口内**随机 N 次**（如群冒泡） | `schedule.scatter({ window, count: 3, on: 'workday' }, handler)` | `ScatterInput` |
+| 节前提醒 / 返工首日 scatter | `on: { kind: 'holidayEve' }` / `{ kind: 'afterHoliday', daysAfter: 1 }` | `ScatterDayFilter` |
 | 进程重启后仍保留任务 | 配置 `store` + `(…, handler, key)` | 见 [注册与持久化](#注册与持久化) |
 
-可运行示例：`pnpm run example:basic` / `pnpm run example:persist` / `pnpm run example:scatter`（源码 [examples/](./examples/)）。
+可运行示例：`pnpm run example:basic` / `example:persist` / `example:sqlite-persist` / `example:scatter` / `example:scatter-advanced` / `example:holiday-eve` / `example:scheduler-ops`（源码 [examples/](./examples/)）。
 
 ## 注册与持久化
 
@@ -119,7 +120,13 @@ scheduler.solar('0 0 9 * * *', dailyReport, 'daily-report');
 scheduler.registerHandler('weekly', (ctx) => console.log(ctx.jobId));
 ```
 
-**注意**：本地 JSON 适用于单进程；多进程写同一文件不安全。分布式场景预留 `JobStore.claim/release`，后续可通过 optional `peerDependencies`（`bullmq` / `ioredis`）扩展。
+**注意**：本地 JSON 适用于单进程；多进程写同一文件不安全。单节点生产可用 `createSqliteStore`（Node.js 22.5+ 内置 `node:sqlite`，零额外依赖）。分布式场景用 `createRedisStore` + optional `ioredis` peer。
+
+| Store | 适用场景 | 依赖 |
+|-------|----------|------|
+| `createLocalJsonStore` | 开发、单进程快速开始 | 无 |
+| `createSqliteStore` | 单节点生产、WAL 单文件 | Node 22.5+ `node:sqlite` |
+| `createRedisStore` | 多 worker + claim | optional `ioredis` |
 
 ## holiday 法定假日调度
 
@@ -331,20 +338,26 @@ schedule.holiday({ cron: at9, festivals: ['国庆节'] }, handler);
 ```typescript
 import { scatter } from 'cn-calendar-schedule';
 
-// 工作日 09:00–22:00 内随机冒泡 3 次（如群机器人）
 schedule.scatter(
-  scatter.daily({ window: { start: '09:00', end: '22:00' }, count: 3, on: 'workday' }),
+  scatter.daily({
+    window: { start: '09:00', end: '22:00' },
+    count: 3,
+    on: 'workday',
+    minGapMinutes: 30,
+    quietHours: [{ start: '12:00', end: '13:00' }],
+    misfire: 'coalesce',
+  }),
   (ctx) => {
-    console.log(`第 ${ctx.scatterIndex}/${ctx.scatterCount} 次`, ctx.solarText);
+    console.log(`第 ${ctx.scatterIndex}/${ctx.scatterCount} 次`, ctx.scatterRemaining);
   },
   'group-bubble',
   { id: 'bubble-1' },
 );
 
-// on: 'all' | 'workday' | 'freeDay' | { kind: 'holiday'; festivals?; everyDayOfHoliday? }
+// on: 'all' | 'workday' | 'freeDay' | { kind: 'holiday' | 'holidayEve' | 'afterHoliday'; ... }
 ```
 
-可运行示例：`pnpm run example:scatter`（源码 [examples/scatter.mjs](./examples/scatter.mjs)）。
+可运行示例：`pnpm run example:scatter` / `pnpm run example:scatter-advanced`（源码 [examples/](./examples/)）。
 
 `parseCronTime()` 仅适用于**精确时刻**的 calendar cron；步进表达式请用 `parseCron()`。
 
@@ -376,7 +389,12 @@ const { CalendarScheduler } = require('cn-calendar-schedule');
 | `.freeDay(cron, handler, key?, extras?)` | 休息日；calendar cron |
 | `.workday(cron, handler, key?, extras?)` | 工作日；calendar cron |
 | `.scatter(input, handler, key?, extras?)` | 时段内随机 N 次；`ScatterInput` |
+| `.list()` / `.get(id)` / `.pause(id)` / `.resume(id)` | 任务 introspection 与暂停 |
 | `.cancel(id)` / `.stop()` | 取消 / 停止 |
+| `createLocalJsonStore` / `createSqliteStore` / `createRedisStore` | 单进程 JSON / SQLite（`node:sqlite`，Node 22.5+）/ Redis store |
+| `listScatterSlots` / `listScatterSlotsForDay` | 预览 scatter 计划时刻 |
+| `simulateNextRuns` / `pnpm run next-runs` | 纯计算未来 N 次触发 |
+| `isHolidayEve` / `isDaysAfterHoliday` / … | 中国日历 helper（见 `calendar-helpers.ts`） |
 | `resolveSolarJob` / `resolveLunarJob` / … / `resolveScatterJob` | 纯函数，构建 `ResolvedJob` |
 | `getNextRun(job, from?, options?)` | 计算下次触发时间；scatter 需 `{ jobId, scatterState? }` |
 | `parseCron(expr)` | 解析 6 段 cron |
@@ -467,8 +485,10 @@ const ctx = buildJobContext('job-1', 'holiday', new Date('2024-10-01T09:00:00+08
 - `SchedulerOptions` — `{ timezone?, onError?, store?, storePath?, handlers?, reconcileIntervalMs? }`
 - `ScheduleKind` — `'solar' | 'lunar' | 'holiday' | 'freeDay' | 'workday' | 'scatter'`
 - `ResolvedJob` — 扁平六分支配置
-- `ScatterInput` — `{ window: { start, end }, count, on }`；`on` 为 `ScatterDayFilter`
-- `ScatterDayFilter` — `'all' | 'workday' | 'freeDay' | { kind: 'holiday'; festivals?; everyDayOfHoliday? }`
+- `ScatterInput` — `{ window, count, on, minGapMinutes?, quietHours?, misfire? }`
+- `ScatterDayFilter` — `'all' | 'workday' | 'freeDay' | { kind: 'holiday' | 'holidayEve' | 'afterHoliday'; ... }`
+- `ScatterMisfirePolicy` — `'fire' | 'skip' | 'coalesce'`（默认 `fire`；`coalesce` 合并同日过期 slot）
+- `JobSnapshot` — `list()` / `get()` 返回的任务摘要
 - `ScatterRunState` / `ScatterJobPayload` — 进度 `{ dateKey, firedCount }`，存于 `payload.scatter`
 - `HolidayInput` — `{ cron, festivals?, everyDayOfHoliday? }`；`cron` 为 calendar cron（日/月/周须为 `*`）
 - `DEFAULT_CALENDAR_CRON` — 默认触发时刻 `'0 0 9 * * *'`
